@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#07111f">
+  <title>ARGUS Pro — Autonomous Web QA Investigator</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><div class="logo"><i></i></div><div><strong>ARGUS</strong><span>QA INVESTIGATOR · v3</span></div></div>
+    <div class="nav-label">Workspace</div>
+    <nav id="nav">
+      <button class="nav active" data-view="overview"><span>⌂</span>Overview</button>
+      <button class="nav" data-action="newScan"><span>⌕</span>New Investigation</button>
+      <button class="nav" data-view="issues"><span>⚠</span>Issue Explorer <b id="navIssueCount">0</b></button>
+      <button class="nav" data-view="pages"><span>▤</span>Page Explorer</button>
+      <button class="nav" data-view="journeys"><span>⌘</span>Interactions</button>
+      <button class="nav" data-view="network"><span>⌬</span>Network & APIs</button>
+      <button class="nav" data-view="performance"><span>◴</span>Performance</button>
+      <button class="nav" data-view="accessibility"><span>♿</span>Accessibility</button>
+      <button class="nav" data-view="changeguard"><span>↺</span>ChangeGuard</button>
+      <button class="nav" data-view="ai"><span>✦</span>AI Investigator</button>
+      <button class="nav" data-view="history"><span>◷</span>History</button>
+    </nav>
+    <div class="sidebar-card">
+      <div class="pulse"></div>
+      <strong>Evidence-first QA</strong>
+      <p>Find → reproduce → explain → fix → retest.</p>
+      <small>ARGUS does not auto-submit destructive forms or bypass authentication.</small>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button id="mobileMenu" class="icon-btn">☰</button>
+      <div class="engine"><i id="engineDot"></i><span id="engineStatus">Connecting engine…</span></div>
+      <div class="top-actions"><button class="ghost" id="exportBtn">Export JSON</button><button class="ghost" id="htmlBtn">HTML Report</button><div class="avatar">A</div></div>
+    </header>
+
+    <section class="scanbar" id="scanbar">
+      <div class="target"><span>◎</span><input id="urlInput" type="url" placeholder="https://your-authorized-website.com"></div>
+      <select id="scanMode"><option value="quick">Quick Recon</option><option value="standard">Standard</option><option value="deep" selected>Deep Investigation</option><option value="full">Full Site</option></select>
+      <button class="primary" id="startScan">▶ Start Investigation</button>
+      <div class="scan-settings">
+        <label><input id="crawlEntireSite" type="checkbox" checked> Sitemap + internal links</label>
+        <label><input id="testInteractions" type="checkbox" checked> Safe interactions</label>
+        <label><input id="mobileChecks" type="checkbox" checked> Mobile evidence</label>
+        <label><input id="comparePrevious" type="checkbox" checked> ChangeGuard</label>
+        <span id="modeHint">Up to 450 broad checks · 90 deep investigations</span>
+      </div>
+      <div class="progress hidden" id="progress"><div class="progress-track"><i id="progressBar"></i></div><div><b id="progressTitle">Starting…</b><span id="progressMeta"></span></div></div>
+    </section>
+
+    <section class="welcome" id="welcome">
+      <div class="hero-eye"><div class="logo giant"><i></i></div></div>
+      <span class="eyebrow">ARGUS PRO · EVIDENCE-FIRST AUTONOMOUS QA</span>
+      <h1>Not another scanner.<br><em>A failure investigator.</em></h1>
+      <p>ARGUS maps the site, samples templates intelligently, runs real-browser checks, captures the exact failing element, builds reproduction steps, proposes a fix plan, and verifies changes with ChangeGuard.</p>
+      <div class="hero-grid">
+        <article><b>01</b><strong>Discover</strong><span>Sitemap, links, templates, critical routes.</span></article>
+        <article><b>02</b><strong>Investigate</strong><span>DOM, console, network, responsive, interactions.</span></article>
+        <article><b>03</b><strong>Prove</strong><span>Issue-level screenshots and exact evidence.</span></article>
+        <article><b>04</b><strong>Fix</strong><span>Ordered implementation + retest plan.</span></article>
+      </div>
+    </section>
+
+    <section class="workspace hidden" id="workspace">
+      <section class="report-head card">
+        <div class="site-title"><div class="site-mark">◎</div><div><span>Investigation complete</span><h2 id="reportUrl">—</h2><small id="reportMeta">—</small></div></div>
+        <div class="head-metric"><b id="mScore">0</b><span>QA Score</span></div>
+        <div class="head-metric"><b id="mPages">0</b><span>Pages Checked</span></div>
+        <div class="head-metric"><b id="mDeep">0</b><span>Deep Tested</span></div>
+        <div class="head-metric"><b id="mEvidence">0</b><span>Issue Captures</span></div>
+        <div class="head-metric danger"><b id="mIssues">0</b><span>Findings</span></div>
+      </section>
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-view="overview">Overview</button>
+        <button class="tab" data-view="issues">Issue Explorer</button>
+        <button class="tab" data-view="pages">Pages</button>
+        <button class="tab" data-view="journeys">Interactions</button>
+        <button class="tab" data-view="network">Network</button>
+        <button class="tab" data-view="changeguard">ChangeGuard</button>
+        <button class="tab" data-view="ai">AI</button>
+      </div>
+      <div id="view"></div>
+    </section>
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "name": "argus-autonomous-web-qa",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ARGUS Pro v3 - autonomous web QA investigation with issue-level visual evidence, root-cause guidance and retest workflows.",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "check": "node --check src/server.js && node --check src/scanner.js && node --check src/ai.js && node --check src/solutions.js && node --check public/app.js",
+    "test:unit": "node src/selftest.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "playwright-core": "^1.55.0"
+  }
+}

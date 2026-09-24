@@ -1,0 +1,8 @@
+node_modules/
+.env
+.env.*
+!.env.example
+data/scans/*.json
+data/screenshots/*.png
+npm-debug.log*
+.DS_Store

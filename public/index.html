@@ -4,19 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light">
-  <meta name="theme-color" content="#07111f">
-  <title>ARGUS Pro — Autonomous Web QA Investigator</title>
+  <meta name="theme-color" content="#07101f">
+  <title>ARGUS Playground — Autonomous Web QA Investigator</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
-<body>
+<body class="playground-ui">
 <div class="app">
   <aside class="sidebar" id="sidebar">
-    <div class="brand"><div class="logo"><i></i></div><div><strong>ARGUS</strong><span>QA INVESTIGATOR · v3</span></div></div>
-    <div class="nav-label">Workspace</div>
+    <div class="brand">
+      <div class="logo"><i></i></div>
+      <div><strong>ARGUS</strong><span>AUTONOMOUS WEB QA</span></div>
+    </div>
+
+    <div class="nav-label">Investigation</div>
     <nav id="nav">
-      <button class="nav active" data-view="overview"><span>⌂</span>Overview</button>
+      <button class="nav active" data-view="overview"><span>◫</span>Playground</button>
       <button class="nav" data-action="newScan"><span>⌕</span>New Investigation</button>
-      <button class="nav" data-view="issues"><span>⚠</span>Issue Explorer <b id="navIssueCount">0</b></button>
+      <button class="nav" data-view="issues"><span>◎</span>Issue Explorer <b id="navIssueCount">0</b></button>
       <button class="nav" data-view="pages"><span>▤</span>Page Explorer</button>
       <button class="nav" data-view="journeys"><span>⌘</span>Interactions</button>
       <button class="nav" data-view="network"><span>⌬</span>Network & APIs</button>
@@ -26,65 +30,216 @@
       <button class="nav" data-view="ai"><span>✦</span>AI Investigator</button>
       <button class="nav" data-view="history"><span>◷</span>History</button>
     </nav>
-    <div class="sidebar-card">
-      <div class="pulse"></div>
-      <strong>Evidence-first QA</strong>
-      <p>Find → reproduce → explain → fix → retest.</p>
-      <small>ARGUS does not auto-submit destructive forms or bypass authentication.</small>
+
+    <div class="sidebar-card playground-brand-card">
+      <div class="mini-orbit">
+        <span></span><span></span><span></span>
+        <div class="logo mini"><i></i></div>
+      </div>
+      <strong>ARGUS LAB</strong>
+      <p>Observe. Correlate. Prove. Fix.</p>
+      <small>Evidence-first automation for authorized web QA.</small>
     </div>
   </aside>
 
   <main class="main">
-    <header class="topbar">
+    <header class="topbar playground-topbar">
       <button id="mobileMenu" class="icon-btn">☰</button>
+      <div class="crumb">
+        <span class="crumb-dot"></span>
+        <strong>Playground</strong>
+        <span>Autonomous investigation workspace</span>
+      </div>
       <div class="engine"><i id="engineDot"></i><span id="engineStatus">Connecting engine…</span></div>
-      <div class="top-actions"><button class="ghost" id="exportBtn">Export JSON</button><button class="ghost" id="htmlBtn">HTML Report</button><div class="avatar">A</div></div>
+      <div class="top-actions">
+        <button class="ghost" id="exportBtn">Export JSON</button>
+        <button class="ghost" id="htmlBtn">HTML Report</button>
+        <div class="avatar">A</div>
+      </div>
     </header>
 
-    <section class="scanbar" id="scanbar">
-      <div class="target"><span>◎</span><input id="urlInput" type="url" placeholder="https://your-authorized-website.com"></div>
-      <select id="scanMode"><option value="quick">Quick Recon</option><option value="standard">Standard</option><option value="deep" selected>Deep Investigation</option><option value="full">Full Site</option></select>
-      <button class="primary" id="startScan">▶ Start Investigation</button>
-      <div class="scan-settings">
-        <label><input id="crawlEntireSite" type="checkbox" checked> Sitemap + internal links</label>
-        <label><input id="testInteractions" type="checkbox" checked> Safe interactions</label>
-        <label><input id="mobileChecks" type="checkbox" checked> Mobile evidence</label>
-        <label><input id="comparePrevious" type="checkbox" checked> ChangeGuard</label>
+    <section class="scanbar command-dock" id="scanbar">
+      <div class="scan-command-row">
+        <div class="target command-target">
+          <span class="target-icon">◎</span>
+          <div class="target-copy"><small>Target website</small><input id="urlInput" type="url" placeholder="https://your-authorized-website.com"></div>
+        </div>
+        <div class="mode-box">
+          <small>Scan mode</small>
+          <select id="scanMode">
+            <option value="quick">Quick Recon</option>
+            <option value="standard">Standard</option>
+            <option value="deep" selected>Deep Investigation</option>
+            <option value="full">Full Site</option>
+          </select>
+        </div>
+        <button class="primary launch-btn" id="startScan"><span>▶</span><b>Start Investigation</b><small>Launch ARGUS</small></button>
+      </div>
+
+      <div class="module-strip">
+        <label class="module-tile module-blue">
+          <input id="crawlEntireSite" type="checkbox" checked>
+          <span class="module-icon">◉</span>
+          <span><b>Web Scanner</b><small>Sitemap · links · templates</small></span>
+          <i class="module-switch"></i>
+        </label>
+        <label class="module-tile module-green">
+          <input id="testInteractions" type="checkbox" checked>
+          <span class="module-icon">⌘</span>
+          <span><b>Interaction Lab</b><small>Safe UI journeys</small></span>
+          <i class="module-switch"></i>
+        </label>
+        <label class="module-tile module-cyan">
+          <input id="mobileChecks" type="checkbox" checked>
+          <span class="module-icon">▣</span>
+          <span><b>Responsive Lab</b><small>Overflow · tap targets</small></span>
+          <i class="module-switch"></i>
+        </label>
+        <label class="module-tile module-violet">
+          <input id="comparePrevious" type="checkbox" checked>
+          <span class="module-icon">↺</span>
+          <span><b>ChangeGuard</b><small>Regression intelligence</small></span>
+          <i class="module-switch"></i>
+        </label>
+        <div class="module-tile module-ai">
+          <span class="module-icon">✦</span>
+          <span><b>AI Investigator</b><small>On-demand evidence analysis</small></span>
+          <em>READY</em>
+        </div>
+      </div>
+
+      <div class="command-meta">
+        <span class="live-pill"><i></i> Evidence-first execution</span>
         <span id="modeHint">Up to 450 broad checks · 90 deep investigations</span>
       </div>
-      <div class="progress hidden" id="progress"><div class="progress-track"><i id="progressBar"></i></div><div><b id="progressTitle">Starting…</b><span id="progressMeta"></span></div></div>
+
+      <div class="progress hidden" id="progress">
+        <div class="progress-track"><i id="progressBar"></i></div>
+        <div><b id="progressTitle">Starting…</b><span id="progressMeta"></span></div>
+      </div>
     </section>
 
-    <section class="welcome" id="welcome">
-      <div class="hero-eye"><div class="logo giant"><i></i></div></div>
-      <span class="eyebrow">ARGUS PRO · EVIDENCE-FIRST AUTONOMOUS QA</span>
-      <h1>Not another scanner.<br><em>A failure investigator.</em></h1>
-      <p>ARGUS maps the site, samples templates intelligently, runs real-browser checks, captures the exact failing element, builds reproduction steps, proposes a fix plan, and verifies changes with ChangeGuard.</p>
-      <div class="hero-grid">
-        <article><b>01</b><strong>Discover</strong><span>Sitemap, links, templates, critical routes.</span></article>
-        <article><b>02</b><strong>Investigate</strong><span>DOM, console, network, responsive, interactions.</span></article>
-        <article><b>03</b><strong>Prove</strong><span>Issue-level screenshots and exact evidence.</span></article>
-        <article><b>04</b><strong>Fix</strong><span>Ordered implementation + retest plan.</span></article>
+    <section class="welcome playground-welcome" id="welcome">
+      <div class="playground-grid-bg"></div>
+      <div class="playground-head">
+        <div>
+          <span class="eyebrow">ARGUS PLAYGROUND · LIVE QA ORCHESTRATION</span>
+          <h1>Watch the investigation<br><em>think in layers.</em></h1>
+          <p>ARGUS discovers the site, selects risky routes, runs real-browser checks, captures issue-level evidence, correlates failures, and builds a developer-ready fix path.</p>
+        </div>
+        <div class="playground-status">
+          <div><i class="status-green"></i><span>Engine</span><b>Ready</b></div>
+          <div><i class="status-blue"></i><span>Browser</span><b>Chrome</b></div>
+          <div><i class="status-violet"></i><span>AI</span><b>On-demand</b></div>
+        </div>
+      </div>
+
+      <div class="lab-layout">
+        <section class="flow-canvas">
+          <div class="canvas-toolbar">
+            <div><strong>Investigation Canvas</strong><span>Pipeline preview</span></div>
+            <div class="canvas-actions"><button>Live Run</button><button>Auto Layout</button><button>100%</button></div>
+          </div>
+
+          <div class="flow-stage">
+            <div class="flow-glow glow-a"></div>
+            <div class="flow-glow glow-b"></div>
+            <svg class="flow-lines" viewBox="0 0 980 520" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="lineBlue" x1="0" x2="1"><stop offset="0" stop-color="#2f7fff"/><stop offset="1" stop-color="#8957ff"/></linearGradient>
+              </defs>
+              <path d="M205 260 C290 260 280 90 390 90" />
+              <path d="M205 260 C290 260 290 180 390 180" />
+              <path d="M205 260 C290 260 290 270 390 270" />
+              <path d="M205 260 C290 260 290 360 390 360" />
+              <path d="M205 260 C290 260 280 450 390 450" />
+              <path d="M555 90 C640 90 630 220 705 260" />
+              <path d="M555 180 C640 180 645 225 705 260" />
+              <path d="M555 270 C625 270 650 270 705 260" />
+              <path d="M555 360 C640 360 645 295 705 260" />
+              <path d="M555 450 C640 450 630 310 705 260" />
+              <path class="out critical-line" d="M845 225 C900 225 900 140 948 140" />
+              <path class="out high-line" d="M845 250 C900 250 900 225 948 225" />
+              <path class="out medium-line" d="M845 275 C900 275 900 310 948 310" />
+              <path class="out low-line" d="M845 300 C900 300 900 395 948 395" />
+            </svg>
+
+            <div class="node target-node">
+              <span class="node-icon">◎</span>
+              <div><small>INPUT</small><strong>Target Website</strong><em>Waiting for URL</em></div>
+            </div>
+
+            <div class="module-node node-1"><span>◉</span><div><strong>Crawl & Discover</strong><small>Routes · templates · forms</small></div><b>01</b></div>
+            <div class="module-node node-2"><span>♿</span><div><strong>Accessibility</strong><small>Names · semantics · structure</small></div><b>02</b></div>
+            <div class="module-node node-3"><span>◴</span><div><strong>Performance</strong><small>Timing · transfer · runtime</small></div><b>03</b></div>
+            <div class="module-node node-4"><span>⌘</span><div><strong>Interaction Lab</strong><small>Safe clicks · state changes</small></div><b>04</b></div>
+            <div class="module-node node-5"><span>▣</span><div><strong>Responsive Lab</strong><small>Mobile evidence</small></div><b>05</b></div>
+
+            <div class="core-node">
+              <div class="core-ring ring-1"></div><div class="core-ring ring-2"></div>
+              <div class="logo core-logo"><i></i></div>
+              <strong>ARGUS</strong>
+              <span>Correlate</span><span>Prioritize</span><span>Prove</span><span>Fix</span>
+            </div>
+
+            <div class="result-node result-critical"><span>!</span><div><strong>Critical</strong><small>Release blockers</small></div></div>
+            <div class="result-node result-high"><span>↑</span><div><strong>High</strong><small>Fix first</small></div></div>
+            <div class="result-node result-medium"><span>◆</span><div><strong>Medium</strong><small>Review</small></div></div>
+            <div class="result-node result-low"><span>·</span><div><strong>Low</strong><small>Improve</small></div></div>
+          </div>
+        </section>
+
+        <aside class="copilot-card">
+          <div class="copilot-head">
+            <div class="copilot-orb">✦</div>
+            <div><strong>ARGUS AI</strong><span>Investigation Copilot</span></div>
+            <em>OPTIONAL</em>
+          </div>
+          <div class="copilot-body">
+            <div class="ai-message">
+              <small>ARGUS</small>
+              <p>I stay evidence-bound. The deterministic engine finds and proves issues first; AI helps correlate root causes and explain fixes.</p>
+            </div>
+            <div class="copilot-steps">
+              <div><i class="done"></i><span>Discover website architecture</span></div>
+              <div><i></i><span>Run deep browser investigation</span></div>
+              <div><i></i><span>Capture exact failing elements</span></div>
+              <div><i></i><span>Build root-cause chain</span></div>
+              <div><i></i><span>Generate retest plan</span></div>
+            </div>
+          </div>
+          <div class="copilot-prompt"><span>Ask after a scan: “Why is this failing?”</span><b>→</b></div>
+        </aside>
+      </div>
+
+      <div class="playground-footer-cards">
+        <article><span>01</span><div><b>Evidence Lab</b><small>Cropped issue screenshots, DOM, network, console.</small></div></article>
+        <article><span>02</span><div><b>Solution Engine</b><small>Exact steps, likely cause, patch pattern, retest.</small></div></article>
+        <article><span>03</span><div><b>ChangeGuard</b><small>New, resolved, and regressed findings across scans.</small></div></article>
       </div>
     </section>
 
     <section class="workspace hidden" id="workspace">
       <section class="report-head card">
-        <div class="site-title"><div class="site-mark">◎</div><div><span>Investigation complete</span><h2 id="reportUrl">—</h2><small id="reportMeta">—</small></div></div>
+        <div class="site-title">
+          <div class="site-mark">◎</div>
+          <div><span>Investigation complete</span><h2 id="reportUrl">—</h2><small id="reportMeta">—</small></div>
+        </div>
         <div class="head-metric"><b id="mScore">0</b><span>QA Score</span></div>
         <div class="head-metric"><b id="mPages">0</b><span>Pages Checked</span></div>
         <div class="head-metric"><b id="mDeep">0</b><span>Deep Tested</span></div>
-        <div class="head-metric"><b id="mEvidence">0</b><span>Issue Captures</span></div>
+        <div class="head-metric"><b id="mEvidence">0</b><span>Evidence</span></div>
         <div class="head-metric danger"><b id="mIssues">0</b><span>Findings</span></div>
       </section>
+
       <div class="tabs" id="tabs">
-        <button class="tab active" data-view="overview">Overview</button>
-        <button class="tab" data-view="issues">Issue Explorer</button>
+        <button class="tab active" data-view="overview">Playground</button>
+        <button class="tab" data-view="issues">Evidence Lab</button>
         <button class="tab" data-view="pages">Pages</button>
         <button class="tab" data-view="journeys">Interactions</button>
         <button class="tab" data-view="network">Network</button>
         <button class="tab" data-view="changeguard">ChangeGuard</button>
-        <button class="tab" data-view="ai">AI</button>
+        <button class="tab" data-view="ai">AI Investigator</button>
       </div>
       <div id="view"></div>
     </section>

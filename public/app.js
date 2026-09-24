@@ -35,8 +35,184 @@ function renderReport(){const r=state.report;if(!r)return;$('#welcome').classLis
 
 function switchView(view){if(!view)return;state.view=view;$$('.nav').forEach(x=>x.classList.toggle('active',x.dataset.view===view));$$('.tab').forEach(x=>x.classList.toggle('active',x.dataset.view===view));if(view==='history')return renderHistory();if(!state.report)return toast('Run a scan or open one from History first.',true);({overview:renderOverview,issues:renderIssues,pages:renderPages,journeys:renderJourneys,network:renderNetwork,performance:renderPerformance,accessibility:renderAccessibility,changeguard:renderChangeGuard,ai:renderAI}[view]||renderOverview)();}
 
-function renderOverview(){const r=state.report,iss=allIssues(),cats=categories(),topPatterns=(r.systemicPatterns||[]).slice(0,6);$('#view').innerHTML=`<div class="view"><div class="grid three"><section class="card panel">${panelHead('Severity','Evidence-backed findings')}<div class="stat-row"><div class="stat critical"><span>Critical</span><b>${r.issueCounts?.critical||0}</b></div><div class="stat high"><span>High</span><b>${r.issueCounts?.high||0}</b></div><div class="stat medium"><span>Medium</span><b>${r.issueCounts?.medium||0}</b></div><div class="stat low"><span>Low</span><b>${r.issueCounts?.low||0}</b></div></div></section><section class="card panel">${panelHead('Investigation Coverage','How much evidence ARGUS actually captured')}<div class="kv"><span>Element screenshots</span><b>${r.investigation?.issuesWithVisualEvidence||0}</b></div><div class="kv"><span>Selector-backed issues</span><b>${r.investigation?.issuesWithSelectors||0}</b></div><div class="kv"><span>Network evidence</span><b>${r.investigation?.networkEvidenceIssues||0}</b></div><div class="kv"><span>Heuristic findings</span><b>${r.investigation?.heuristics||0}</b></div></section><section class="card panel">${panelHead('Release Gate','Automated triage, not a deployment approval')}<div class="stat ${r.releaseGate?.status==='BLOCK'?'critical':r.releaseGate?.status==='REVIEW'?'high':''}"><span>Status</span><b>${esc(r.releaseGate?.status||'REVIEW')}</b></div><div class="insight" style="margin-top:10px">${esc(r.releaseGate?.reason||'Review findings before release.')}</div><div class="detail-badges" style="margin-top:10px"><span class="tiny">${r.releaseGate?.blockerCount||0} blocker candidates</span>${(r.technologies||[]).slice(0,4).map(t=>`<span class="tiny">${esc(t.name)}</span>`).join('')}</div></section></div><div style="height:12px"></div><div class="grid two"><section class="card panel">${panelHead('Fix First','Highest-severity queue','<button class="ghost" data-go-issues>Open Issue Explorer</button>')}<div class="triage-list">${iss.slice(0,8).map(i=>`<div class="triage-item" data-issue="${esc(i.id)}"><i class="sev-dot ${esc(i.severity)}"></i><div><strong>${esc(i.title)}</strong><small>${esc(shortUrl(i.url))} · ${esc(i.evidence)}</small></div>${sevBadge(i.severity)}</div>`).join('')||'<div class="empty">No findings.</div>'}</div></section><section class="card panel">${panelHead('Systemic Root-Cause Candidates','Repeated findings that may be fixed once in a shared template/component')}<div>${topPatterns.map(p=>`<div class="pattern"><div><strong>${esc(p.title)}</strong><span class="badge">${p.pageCount} pages</span></div><p>${esc(p.likelyCause||p.recommendation||'')}</p></div>`).join('')||'<div class="empty">No repeated patterns.</div>'}</div></section></div><div style="height:12px"></div><div class="grid two"><section class="card panel">${panelHead('Scan Planner','Why ARGUS selected deep pages')}<div class="planner">${(r.scanPlan?.deepTargets||[]).slice(0,12).map(x=>`<div class="plan-row"><span class="badge">${esc(x.reason)}</span><code>${esc(shortUrl(x.url))}</code><small>${esc(x.templateId)}</small></div>`).join('')}</div></section><section class="card panel">${panelHead('Category Mix','Finding distribution')}<div class="host-list">${Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="host-row"><b>${esc(k)}</b><span>${v} findings</span><span>${Math.round(v/Math.max(iss.length,1)*100)}%</span></div>`).join('')}</div></section></div></div>`;$$('[data-go-issues]').forEach(b=>b.onclick=()=>switchView('issues'));$$('[data-issue]').forEach(x=>x.onclick=()=>{state.selectedIssue=x.dataset.issue;switchView('issues');});}
+function renderOverview(){
+  const r=state.report,iss=allIssues(),cats=categories();
+  const critical=iss.filter(i=>i.severity==='critical').length;
+  const high=iss.filter(i=>i.severity==='high').length;
+  const medium=iss.filter(i=>i.severity==='medium').length;
+  const low=iss.filter(i=>i.severity==='low').length;
+  const top=iss[0]||null;
+  const topArt=top?.artifacts?.[0];
+  const cg=r.changeGuard||{};
+  const crawled=r.coverage?.lightChecked||0;
+  const discovered=r.coverage?.urlsDiscovered||crawled||1;
+  const excluded=Math.max(0,discovered-crawled);
+  const coveragePct=Math.round((crawled/Math.max(discovered,1))*100);
+  const deepPct=Math.round(((r.coverage?.deepTested||0)/Math.max(crawled,1))*100);
+  const severityTotal=Math.max(iss.length,1);
+  const issueBars=[
+    ['critical',critical,'Critical'],
+    ['high',high,'High'],
+    ['medium',medium,'Medium'],
+    ['low',low,'Low']
+  ];
+  const categoryRows=Object.entries(cats).sort((a,b)=>b[1]-a[1]).slice(0,6);
 
+  $('#view').innerHTML=`
+  <div class="view enterprise-dashboard">
+    <div class="dashboard-top-grid">
+      <section class="card overview-card">
+        <div class="section-title-row">
+          <div>
+            <h3>Investigation Overview</h3>
+            <p>Coverage, severity distribution and scan health</p>
+          </div>
+          <span class="status-chip success">● Completed</span>
+        </div>
+
+        <div class="overview-body">
+          <div class="coverage-ring-wrap">
+            <div class="coverage-ring" style="--coverage:${coveragePct}deg">
+              <div><b>${crawled}</b><span>of ${discovered} pages</span></div>
+            </div>
+            <div class="coverage-legend">
+              <div><i class="legend-dot blue"></i><span>Crawled</span><b>${crawled}</b><em>${coveragePct}%</em></div>
+              <div><i class="legend-dot red"></i><span>Not checked</span><b>${excluded}</b><em>${100-coveragePct}%</em></div>
+              <div><i class="legend-dot purple"></i><span>Deep tested</span><b>${r.coverage?.deepTested||0}</b><em>${deepPct}%</em></div>
+              <div><i class="legend-dot gray"></i><span>Templates</span><b>${r.coverage?.templates||0}</b><em>unique</em></div>
+            </div>
+          </div>
+
+          <div class="issue-trend-panel">
+            <div class="issue-trend-head">
+              <strong>Findings by severity</strong>
+              <span>${iss.length} total findings</span>
+            </div>
+            <div class="severity-bars">
+              ${issueBars.map(([s,n,label])=>`<div class="severity-bar-row"><span>${label}</span><div class="severity-track"><i class="${s}" style="width:${Math.max(4,Math.round(n/severityTotal*100))}%"></i></div><b>${n}</b></div>`).join('')}
+            </div>
+            <div class="category-mini-grid">
+              ${categoryRows.map(([k,v])=>`<div><span>${esc(k)}</span><b>${v}</b></div>`).join('')||'<div><span>No categories yet</span><b>0</b></div>'}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card fix-first-card">
+        <div class="section-title-row">
+          <div><h3>Fix First</h3><p>${critical?critical+' critical issue(s) require attention':'Highest-priority findings'}</p></div>
+          <button class="text-action" data-go-issues>View all →</button>
+        </div>
+        <div class="fix-first-list">
+          ${iss.slice(0,5).map((i,n)=>`
+            <button class="fix-first-item" data-issue="${esc(i.id)}">
+              <span class="rank">${n+1}</span>
+              <span class="fix-copy"><strong>${esc(i.title)}</strong><small>${esc(shortUrl(i.url))}</small><em>${esc(i.evidence)}</em></span>
+              ${sevBadge(i.severity)}
+              <span class="chevron">›</span>
+            </button>`).join('')||'<div class="empty compact">No findings in scanned coverage.</div>'}
+        </div>
+      </section>
+    </div>
+
+    <div class="dashboard-main-grid">
+      <section class="card evidence-preview-card">
+        <div class="section-title-row">
+          <div><h3>Evidence Lab</h3><p>Visual proof, technical details and reproduction steps</p></div>
+          <span class="record-count">1 of ${iss.length||0}</span>
+        </div>
+        ${top?`
+          <div class="evidence-preview-body">
+            <div class="evidence-media">
+              ${topArt?`<div class="evidence-shot large"><img src="${esc(topArt.url)}" alt="Issue evidence"></div>`:
+              '<div class="evidence-empty-visual"><span>◎</span><strong>No visual capture for this issue</strong><small>ARGUS uses runtime/header/network evidence when a screenshot would be misleading.</small></div>'}
+              <div class="viewport-chips"><span>Desktop</span><span>Mobile evidence when applicable</span></div>
+            </div>
+            <div class="evidence-facts">
+              <div class="subtabs"><b>Details</b><span>Network</span><span>Console</span><span>Accessibility</span></div>
+              <dl>
+                <div><dt>Page URL</dt><dd>${esc(top.url)}</dd></div>
+                <div><dt>CSS Selector</dt><dd class="mono">${esc(top.selector||'No visual selector')}</dd></div>
+                <div><dt>Confidence</dt><dd>${esc(top.confidence||'—')}</dd></div>
+                <div><dt>Owner</dt><dd>${esc(top.owner||'Review')}</dd></div>
+              </dl>
+              <h4>Evidence</h4>
+              <p>${esc(top.evidence)}</p>
+              <h4>Reproduction Steps</h4>
+              <ol class="compact-steps">${(top.reproductionSteps||[]).slice(0,4).map((x,n)=>`<li><i>${n+1}</i><span>${esc(x)}</span></li>`).join('')}</ol>
+            </div>
+          </div>
+          <div class="related-strip">
+            ${iss.slice(1,4).map((i,n)=>`<button data-issue="${esc(i.id)}"><span>${n+1}</span><div><b>${esc(i.title)}</b><small>${esc(i.category)}</small></div>${sevBadge(i.severity)}</button>`).join('')}
+          </div>
+        `:'<div class="empty">No evidence to display.</div>'}
+      </section>
+
+      <section class="card solution-card">
+        <div class="section-title-row">
+          <div><h3>Solution Engine</h3><p>Deterministic fix guidance from captured evidence</p></div>
+          ${top?'<span class="status-chip success">High signal</span>':''}
+        </div>
+        ${top?`
+          <div class="solution-scroll">
+            <h4>Likely Cause</h4>
+            <p>${esc(top.likelyCause||'Review the evidence and owning implementation.')}</p>
+            <h4>Recommended Fix</h4>
+            <ol class="solution-steps">${(top.solutionSteps||[]).slice(0,5).map((x,n)=>`<li><i>${n+1}</i><span>${esc(x)}</span></li>`).join('')}</ol>
+            <h4>Suggested Patch Pattern</h4>
+            ${top.fixSnippet?`<pre class="solution-code">${esc(top.fixSnippet)}</pre>`:'<div class="callout">No generic patch is safe for this finding. Follow the implementation steps and inspect the owning code.</div>'}
+            <h4>Retest Checklist</h4>
+            <div class="retest-grid">${(top.retest||[]).slice(0,6).map(x=>`<span>✓ ${esc(x)}</span>`).join('')}</div>
+          </div>
+          <button class="primary retest-cta" data-issue="${esc(top.id)}">Open Full Issue & Retest →</button>
+        `:'<div class="empty">No solution data yet.</div>'}
+      </section>
+
+      <div class="right-stack">
+        <section class="card ai-summary-card">
+          <div class="section-title-row">
+            <div><h3>AI Investigator</h3><p>Optional evidence-bound deep analysis</p></div>
+            <span class="ai-pill">✦ ARGUS AI</span>
+          </div>
+          <div class="ai-summary-body">
+            <div class="ai-orb-small">✦</div>
+            <div>
+              <strong>${state.globalAi?.enabled?'Deep analysis available':'Run AI when you need cross-page reasoning'}</strong>
+              <p>${state.globalAi?.enabled?'ARGUS AI analyzed the verified evidence packet.':'The deterministic investigation is already complete. AI is only used for synthesis, hypotheses and prioritization.'}</p>
+            </div>
+          </div>
+          <button class="ai-action wide" data-open-ai>${state.globalAi?.enabled?'View Full Analysis →':'Open AI Investigator →'}</button>
+        </section>
+
+        <section class="card changeguard-summary-card">
+          <div class="section-title-row">
+            <div><h3>ChangeGuard</h3><p>Compared with previous scan</p></div>
+            <button class="text-action" data-open-changeguard>View comparison →</button>
+          </div>
+          <div class="change-stats">
+            <div class="danger"><b>${cg.newIssues?.length||0}</b><span>New issues</span></div>
+            <div class="success"><b>${cg.resolvedIssues?.length||0}</b><span>Resolved</span></div>
+            <div class="purple"><b>${cg.performanceRegressions?.length||0}</b><span>Regressions</span></div>
+          </div>
+          <div class="change-foot">${cg.available?'Baseline comparison available':'First scan becomes the baseline for future comparisons.'}</div>
+        </section>
+
+        <section class="card release-card">
+          <div class="section-title-row"><div><h3>Release Gate</h3><p>Automated triage, not deployment approval</p></div></div>
+          <div class="release-status ${String(r.releaseGate?.status||'REVIEW').toLowerCase().replace(/[^a-z]/g,'-')}">
+            <b>${esc(r.releaseGate?.status||'REVIEW')}</b>
+            <span>${esc(r.releaseGate?.reason||'Review findings before release.')}</span>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>`;
+
+  $$('[data-go-issues]').forEach(b=>b.onclick=()=>switchView('issues'));
+  $$('[data-issue]').forEach(x=>x.onclick=()=>{state.selectedIssue=x.dataset.issue;switchView('issues');});
+  $$('[data-open-ai]').forEach(x=>x.onclick=()=>switchView('ai'));
+  $$('[data-open-changeguard]').forEach(x=>x.onclick=()=>switchView('changeguard'));
+}
 function renderIssues(){const issues=allIssues();if(!state.selectedIssue&&issues[0])state.selectedIssue=issues[0].id;$('#view').innerHTML=`<div class="view issue-workspace"><aside class="card issue-sidebar"><div class="issue-filters"><input id="issueSearch" placeholder="Search findings, URL, evidence"><select id="issueSeverity"><option value="all">All severity</option><option>critical</option><option>high</option><option>medium</option><option>low</option></select></div><div class="issue-scroll" id="issueList"></div></aside><section class="card issue-detail" id="issueDetail"></section></div>`;$('#issueSearch').oninput=renderIssueList;$('#issueSeverity').onchange=renderIssueList;renderIssueList();renderIssueDetail(state.selectedIssue);}
 function renderIssueList(){const q=($('#issueSearch')?.value||'').toLowerCase(),sev=$('#issueSeverity')?.value||'all';const list=allIssues().filter(i=>(sev==='all'||i.severity===sev)&&(!q||`${i.title} ${i.url} ${i.evidence} ${i.category} ${i.owner}`.toLowerCase().includes(q)));$('#issueList').innerHTML=list.map(i=>`<article class="issue-list-item ${i.id===state.selectedIssue?'active':''}" data-issue="${esc(i.id)}"><header><i class="sev-dot ${esc(i.severity)}"></i><h4>${esc(i.title)}</h4>${sevBadge(i.severity)}</header><p>${esc(shortUrl(i.url))}</p><footer><span class="tiny">${esc(i.priority||'')}</span><span class="tiny">${esc(i.category)}</span><span class="tiny">${esc(i.owner||'Review')}</span>${(i.artifacts||[]).length?'<span class="tiny">📷 evidence</span>':''}</footer></article>`).join('')||'<div class="empty">No matching findings.</div>';$$('#issueList [data-issue]').forEach(x=>x.onclick=()=>{state.selectedIssue=x.dataset.issue;renderIssueList();renderIssueDetail(state.selectedIssue);});}
 function findIssue(id){for(const p of state.report.pages||[]){const i=(p.issues||[]).find(x=>x.id===id);if(i)return{i,page:p};}return null;}

@@ -47,7 +47,8 @@ function renderOverview(){
   const crawled=r.coverage?.lightChecked||0;
   const discovered=r.coverage?.urlsDiscovered||crawled||1;
   const excluded=Math.max(0,discovered-crawled);
-  const coveragePct=Math.round((crawled/Math.max(discovered,1))*100);\n  const coverageDeg=Math.round(coveragePct*3.6);
+  const coveragePct=Math.round((crawled/Math.max(discovered,1))*100);
+  const coverageDeg=Math.round(coveragePct*3.6);
   const deepPct=Math.round(((r.coverage?.deepTested||0)/Math.max(crawled,1))*100);
   const severityTotal=Math.max(iss.length,1);
   const issueBars=[

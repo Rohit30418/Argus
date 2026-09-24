@@ -47,7 +47,7 @@ function renderOverview(){
   const crawled=r.coverage?.lightChecked||0;
   const discovered=r.coverage?.urlsDiscovered||crawled||1;
   const excluded=Math.max(0,discovered-crawled);
-  const coveragePct=Math.round((crawled/Math.max(discovered,1))*100);
+  const coveragePct=Math.round((crawled/Math.max(discovered,1))*100);\n  const coverageDeg=Math.round(coveragePct*3.6);
   const deepPct=Math.round(((r.coverage?.deepTested||0)/Math.max(crawled,1))*100);
   const severityTotal=Math.max(iss.length,1);
   const issueBars=[
@@ -72,7 +72,7 @@ function renderOverview(){
 
         <div class="overview-body">
           <div class="coverage-ring-wrap">
-            <div class="coverage-ring" style="--coverage:${coveragePct}deg">
+            <div class="coverage-ring" style="--coverage:${coverageDeg}deg">
               <div><b>${crawled}</b><span>of ${discovered} pages</span></div>
             </div>
             <div class="coverage-legend">

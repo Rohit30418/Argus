@@ -75,10 +75,32 @@ function rankedPages(report) {
 }
 
 function compactReport(report) {
+  const grouped=report.groupedFindings?.findings||[];
   return {
-    rootUrl:report.rootUrl,scannedAt:report.scannedAt,scanMode:report.scanMode,coverage:report.coverage,issueCounts:report.issueCounts,score:report.score,investigation:report.investigation,
-    technologies:report.technologies,externalHosts:(report.externalHosts||[]).slice(0,25),systemicPatterns:(report.systemicPatterns||[]).slice(0,20),changeGuard:report.changeGuard,
-    pages:rankedPages(report).map(p=>({url:p.url,status:p.status,templateId:p.templateId,performance:p.performance,mobileAudit:p.mobileAudit,consoleErrors:(p.consoleErrors||[]).slice(0,5),failedRequests:(p.failedRequests||[]).slice(0,5),httpErrors:(p.httpErrors||[]).slice(0,6),interactionChecks:(p.interactionChecks||[]).slice(0,8),issues:(p.issues||[]).slice(0,14).map(i=>({id:i.id,severity:i.severity,category:i.category,title:i.title,evidence:i.evidence,status:i.status,confidence:i.confidence,selector:i.selector,owner:i.owner,likelyCause:i.likelyCause,solutionSteps:i.solutionSteps,evidenceDetails:i.evidenceDetails}))}))
+    rootUrl:report.rootUrl,
+    scannedAt:report.scannedAt,
+    scanMode:report.scanMode,
+    coverage:report.coverage,
+    issueCounts:report.issueCounts,
+    uniqueFindingCount:report.uniqueFindingCount??grouped.length,
+    score:report.score,
+    investigation:report.investigation,
+    technologies:report.technologies,
+    externalHosts:(report.externalHosts||[]).slice(0,25),
+    groupedFindings:grouped.slice(0,80).map(g=>({
+      category:g.category,title:g.title,severity:g.severity,priority:g.priority,owner:g.owner,confidence:g.confidence,
+      occurrenceCount:g.occurrenceCount,affectedPages:(g.affectedPages||[]).slice(0,20),templates:(g.templates||[]).slice(0,10),
+      evidence:g.evidence,whyItMatters:g.whyItMatters,likelyCause:g.likelyCause,solutionSteps:g.solutionSteps,retest:g.retest
+    })),
+    systemicPatterns:(report.systemicPatterns||[]).slice(0,20),
+    changeGuard:report.changeGuard,
+    pages:rankedPages(report).map(p=>({
+      url:p.url,status:p.status,templateId:p.templateId,performance:p.performance,mobileAudit:p.mobileAudit,
+      consoleErrors:(p.consoleErrors||[]).slice(0,5),
+      failedRequests:(p.failedRequests||[]).slice(0,5),
+      httpErrors:(p.httpErrors||[]).slice(0,6),
+      interactionChecks:(p.interactionChecks||[]).slice(0,8)
+    }))
   };
 }
 

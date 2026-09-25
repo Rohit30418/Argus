@@ -97,6 +97,8 @@ function compactReport(report) {
     uniqueFindingCount:report.uniqueFindingCount??grouped.length,
     score:report.score,
     investigation:report.investigation,
+    dynamic:report.dynamic,
+    systemHealth:report.systemHealth,
     technologies:report.technologies,
     externalHosts:(report.externalHosts||[]).slice(0,25),
     groupedFindings:grouped.slice(0,80).map(g=>({

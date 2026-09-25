@@ -195,6 +195,124 @@ const RULES = [
     snippet: "Content-Security-Policy-Report-Only: default-src 'self'; ...",
     retest: ['Inspect the final HTML response headers.', 'Exercise critical journeys.', 'Confirm no required resource is blocked.', 'Switch to enforced CSP only after report-only stabilizes.']
   }
+  {
+    match: /api completed but ui did not visibly update/i,
+    owner: 'Frontend / State Management',
+    why: 'The backend request succeeded, but the browser did not show a meaningful state change, so users may see stale data or believe the action failed.',
+    root: 'The response handler may not update the expected state, the returned data may be ignored/mapped incorrectly, or rendering may be blocked by stale memoization/conditions. The exact code cause is still a hypothesis until the handler is inspected.',
+    steps: [
+      'Reproduce the captured interaction and open the successful request shown by ARGUS.',
+      'Confirm the response payload contains the data/state the UI expects.',
+      'Inspect the frontend handler/state update triggered by that request.',
+      'Verify the component reads the updated state and is not blocked by stale memoization, an incorrect condition, or an error path.',
+      'Add an explicit empty/success/error state instead of leaving the previous UI unchanged.',
+      'Repeat the same ARGUS interaction and confirm a deterministic DOM/URL/alert/dialog change occurs.'
+    ],
+    inspect: ['Captured control/selector', 'XHR/fetch response handler', 'State store/hook/reducer', 'Owning component render conditions'],
+    snippet: 'const result = await apiCall();\nsetItems(result.items ?? []);\nsetStatus("success");',
+    retest: ['Repeat the same click.', 'Confirm the same request succeeds.', 'Confirm the intended DOM/state changes.', 'Confirm ARGUS no longer reports the API/UI mismatch.']
+  },
+  {
+    match: /duplicate api request after single interaction/i,
+    owner: 'Frontend / Integration',
+    why: 'One user action triggered the same API request multiple times in a short window, which can cause duplicate work, inconsistent state, rate-limit pressure or repeated writes when the endpoint is not idempotent.',
+    root: 'Common causes include duplicate event binding, effect re-execution, double dispatch, multiple subscriptions, or overlapping retry logic. ARGUS cannot prove which one without source inspection.',
+    steps: [
+      'Use the captured control and request URL to reproduce one click.',
+      'Inspect click handlers, delegated listeners, subscriptions and effect dependencies for duplicate registration.',
+      'Check whether both a component handler and a shared/global handler call the same API.',
+      'Check retry/interceptor logic and ensure retries are not firing on successful responses.',
+      'Add an in-flight guard or disable the action while the request is active when appropriate.',
+      'Retest one click and verify exactly one intended XHR/fetch request occurs.'
+    ],
+    inspect: ['Event handler binding', 'Effect/watcher dependencies', 'Action dispatches', 'HTTP retry/interceptor logic'],
+    snippet: 'if (isSubmitting) return;\nsetIsSubmitting(true);\ntry { await save(); } finally { setIsSubmitting(false); }',
+    retest: ['Clear Network.', 'Perform one click.', 'Count matching requests.', 'Confirm only the intended request remains.']
+  },
+  {
+    match: /loading indicator remains after request completed|loading indicator remains visible/i,
+    owner: 'Frontend / State Management',
+    why: 'The UI remains in a loading/busy state after the underlying request completed, which can block interaction and mislead users.',
+    root: 'The loading flag may only be cleared on one branch, or success/empty/error/finally paths may not converge on a settled state.',
+    steps: [
+      'Reproduce the captured interaction and identify the request that completes.',
+      'Inspect where the loading/busy flag is set before the request.',
+      'Ensure success, empty-result, validation-error and exception paths all clear the loading state.',
+      'Prefer a finally/finalization path when the same cleanup must always run.',
+      'Confirm the loader is controlled by the same request lifecycle, not an unrelated background process.',
+      'Retest and verify the captured loader disappears after the request settles.'
+    ],
+    inspect: ['Loading state variable', 'Promise success/error/finally branches', 'Captured loader selector', 'Request lifecycle'],
+    snippet: 'setLoading(true);\ntry { await loadData(); }\nfinally { setLoading(false); }',
+    retest: ['Repeat the same action.', 'Wait for the request to complete.', 'Confirm the loader disappears.', 'Confirm the UI reaches success/empty/error state.']
+  },
+  {
+    match: /authentication or session rejection observed/i,
+    owner: 'Frontend / Backend / Authentication',
+    why: 'A runtime request was rejected with 401/403, which can leave authenticated screens stale or broken if session expiry and authorization states are not handled explicitly.',
+    root: 'The session/token may be expired, missing, invalid, or the user may lack permission. ARGUS cannot infer which case without auth/server evidence.',
+    steps: [
+      'Inspect the exact 401/403 request and determine whether authentication was expected for this journey.',
+      'Verify cookies/tokens are present and sent according to the application auth design.',
+      'Check token/session expiry and refresh behavior.',
+      'For 403, verify role/permission rules on the backend.',
+      'Ensure the frontend exits loading state and shows a clear sign-in/permission message.',
+      'Repeat the journey with a valid authorized session.'
+    ],
+    inspect: ['Auth cookie/token flow', 'Session expiry/refresh logic', 'API authorization middleware', 'Frontend 401/403 handling'],
+    snippet: 'if (response.status === 401) {\n  showSessionExpired();\n  return;\n}',
+    retest: ['Repeat with valid session.', 'Confirm expected request is authorized.', 'Test expiry/logout path separately.', 'Confirm UI shows a clear recoverable state.']
+  },
+  {
+    match: /database health probe reports unavailable or degraded/i,
+    owner: 'Backend / Database / Infrastructure',
+    why: 'The configured same-origin health endpoint explicitly reported the database dependency as unhealthy, so a database availability problem is supported by direct health evidence.',
+    root: 'Possible causes include database service availability, network path, credentials/configuration, connection-pool exhaustion, failover state, or an upstream managed database incident. ARGUS does not inspect credentials or execute SQL.',
+    steps: [
+      'Correlate the health-probe timestamp with application and database infrastructure logs.',
+      'Check database service availability and network reachability from the application host.',
+      'Inspect connection-pool saturation/timeouts and recent configuration/deployment changes.',
+      'Confirm the application is pointing to the intended database environment without exposing credentials to ARGUS.',
+      'Restore database health first, then retest affected API journeys.',
+      'Verify the health endpoint reports healthy and browser/API failures are resolved.'
+    ],
+    inspect: ['Application database connection health', 'Connection pool metrics', 'Database service/managed instance status', 'Backend logs for DB exceptions/timeouts'],
+    snippet: '',
+    retest: ['Check the safe health endpoint.', 'Confirm database state is healthy.', 'Repeat affected API journeys.', 'Confirm no correlated 5xx/timeouts remain.']
+  },
+  {
+    match: /database health probe is slow/i,
+    owner: 'Backend / Database / Performance',
+    why: 'The database dependency health check exceeded the configured latency threshold, which can contribute to slow dynamic/API behavior.',
+    root: 'The latency may come from connection acquisition, the health query itself, database load, lock contention, network latency, or resource saturation. A health probe alone cannot identify the exact query cause.',
+    steps: [
+      'Compare the DB health latency with slow API routes observed during the same scan.',
+      'Check connection-pool wait time and database resource utilization.',
+      'Review slow-query/lock/deadlock telemetry on the database side.',
+      'Verify the health query is intentionally lightweight.',
+      'Optimize the confirmed bottleneck rather than tuning frontend timeouts to hide it.',
+      'Repeat the same scan and compare both DB health latency and affected route timings.'
+    ],
+    inspect: ['DB latency/metrics', 'Connection pool', 'Slow query telemetry', 'API timing correlation'],
+    snippet: '',
+    retest: ['Repeat health probe.', 'Confirm latency is below threshold.', 'Re-run slow dynamic journeys.', 'Compare with ChangeGuard.']
+  },
+  {
+    match: /system health probe is unavailable/i,
+    owner: 'Infrastructure / Backend',
+    why: 'ARGUS could not get a usable response from the configured health endpoint, so database status cannot be verified through that signal.',
+    root: 'The health route may be unavailable, blocked, misconfigured, timing out, or the application itself may be unhealthy.',
+    steps: [
+      'Open the configured health endpoint from the same environment where ARGUS runs.',
+      'Verify it is a safe GET endpoint intended for monitoring.',
+      'Confirm it returns a small JSON response quickly.',
+      'Do not expose connection strings, credentials, stack traces or secrets in the health response.',
+      'Re-run ARGUS after the health endpoint is stable.'
+    ],
+    inspect: ['Health endpoint routing', 'Application availability', 'Monitoring/reverse-proxy rules'],
+    snippet: '{ "application": "ok", "database": { "connected": true, "responseMs": 18 } }',
+    retest: ['Request the health endpoint.', 'Confirm HTTP 200 JSON.', 'Re-run ARGUS.', 'Confirm DB state is reported only from explicit health evidence.']
+  },
 ];
 
 function priorityFor(severity) {

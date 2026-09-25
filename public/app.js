@@ -37,7 +37,7 @@ function sevBadge(s){return `<span class="severity ${esc(s)}">${esc(s)}</span>`;
 function panelHead(title,sub='',right=''){return `<div class="panel-head"><div><h3>${esc(title)}</h3>${sub?`<p>${esc(sub)}</p>`:''}</div>${right}</div>`;}
 function markdown(text=''){return esc(text).split('\n').map(line=>{if(line.startsWith('# '))return`<h1>${line.slice(2)}</h1>`;if(line.startsWith('## '))return`<h2>${line.slice(3)}</h2>`;if(/^[-*] /.test(line))return`<li>${line.slice(2)}</li>`;if(/^\d+\. /.test(line))return`<li>${line.replace(/^\d+\. /,'')}</li>`;if(!line.trim())return'<br>';return`<p>${line}</p>`;}).join('').replace(/(?:<li>.*?<\/li>)+/gs,m=>`<ul>${m}</ul>`);}
 
-async function boot(){try{const s=await api('/api/status');$('#engineDot').classList.add('ok');$('#engineStatus').textContent=`Engine ready · v${s.version} · AI ${s.ai?.configured?`${s.ai.provider}/${s.ai.model}`:'optional'}`;}catch{$('#engineStatus').textContent='Engine unavailable';}await loadHistory();}
+async function boot(){try{const s=await api('/api/status');$('#engineDot').classList.add('ok');$('#engineStatus').textContent=`Engine ready · v${s.version} · AI ${s.ai?.configured?`${s.ai.provider}/${s.ai.model}`:'optional'} · DB probe ${s.healthProbeConfigured?'on':'off'}`;}catch{$('#engineStatus').textContent='Engine unavailable';}await loadHistory();}
 async function loadHistory(){try{state.history=(await api('/api/history')).items||[];}catch{state.history=[];}}
 
 $('#scanMode').onchange=e=>$('#modeHint').textContent=modeHints[e.target.value];

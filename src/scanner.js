@@ -215,13 +215,65 @@ async function captureElement(page, reportId, issueObj, selector, label, viewpor
     await sleep(80);
     const visible = await locator.isVisible({timeout:1200}).catch(()=>false);
     if (!visible) return null;
-    const original = await locator.evaluate(el => ({outline:el.style.outline, outlineOffset:el.style.outlineOffset, boxShadow:el.style.boxShadow})).catch(()=>null);
-    await locator.evaluate(el => { el.style.outline='3px solid #ff3b30'; el.style.outlineOffset='3px'; el.style.boxShadow='0 0 0 5px rgba(255,59,48,.18)'; }).catch(()=>{});
-    const filename=`${reportId}-${issueObj.id}-${sha(label||selector)}.png`;
+
+    const original = await locator.evaluate(el => ({
+      outline:el.style.outline,
+      outlineOffset:el.style.outlineOffset,
+      boxShadow:el.style.boxShadow
+    })).catch(()=>null);
+
+    await locator.evaluate(el => {
+      el.style.outline='3px solid #ff3b30';
+      el.style.outlineOffset='3px';
+      el.style.boxShadow='0 0 0 5px rgba(255,59,48,.18)';
+    }).catch(()=>{});
+
+    const base=`${reportId}-${issueObj.id}-${sha(label||selector)}`;
+    const filename=`${base}.png`;
     const disk=path.join(SCREEN_DIR,filename);
     await locator.screenshot({path:disk,animations:'disabled',timeout:3500});
-    if(original) await locator.evaluate((el,old)=>{el.style.outline=old.outline;el.style.outlineOffset=old.outlineOffset;el.style.boxShadow=old.boxShadow;},original).catch(()=>{});
-    return {kind:'element-screenshot',label:label||'Issue evidence',url:`/artifacts/screenshots/${filename}`,selector,viewport};
+
+    let contextUrl=null;
+    try{
+      const box=await locator.boundingBox();
+      if(box){
+        const dims=await page.evaluate(()=>({
+          scrollX:window.scrollX,
+          scrollY:window.scrollY,
+          width:Math.max(document.documentElement.scrollWidth,document.body?.scrollWidth||0),
+          height:Math.max(document.documentElement.scrollHeight,document.body?.scrollHeight||0)
+        }));
+        const pad=70;
+        const x=Math.max(0,box.x+dims.scrollX-pad);
+        const y=Math.max(0,box.y+dims.scrollY-pad);
+        const width=Math.max(1,Math.min(box.width+pad*2,dims.width-x,900));
+        const height=Math.max(1,Math.min(box.height+pad*2,dims.height-y,620));
+        const contextName=`${base}-context.png`;
+        await page.screenshot({
+          path:path.join(SCREEN_DIR,contextName),
+          clip:{x,y,width,height},
+          animations:'disabled',
+          timeout:4000
+        });
+        contextUrl=`/artifacts/screenshots/${contextName}`;
+      }
+    }catch{}
+
+    if(original) await locator.evaluate((el,old)=>{
+      el.style.outline=old.outline;
+      el.style.outlineOffset=old.outlineOffset;
+      el.style.boxShadow=old.boxShadow;
+    },original).catch(()=>{});
+
+    return {
+      kind:'element-screenshot',
+      label:label||'Exact affected element',
+      url:`/artifacts/screenshots/${filename}`,
+      contextUrl,
+      contextLabel:'Surrounding page context',
+      selector,
+      viewport
+    };
   } catch { return null; }
 }
 

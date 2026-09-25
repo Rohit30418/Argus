@@ -194,7 +194,7 @@ const RULES = [
     inspect: ['Web server/reverse proxy headers', 'Third-party dependency inventory', 'Inline scripts/styles'],
     snippet: "Content-Security-Policy-Report-Only: default-src 'self'; ...",
     retest: ['Inspect the final HTML response headers.', 'Exercise critical journeys.', 'Confirm no required resource is blocked.', 'Switch to enforced CSP only after report-only stabilizes.']
-  }
+  },
   {
     match: /api completed but ui did not visibly update/i,
     owner: 'Frontend / State Management',

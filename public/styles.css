@@ -2099,3 +2099,50 @@ html,body{max-width:100%;overflow-x:hidden}
   .cyber-ui .history-actions{justify-content:space-between;margin-top:10px}
   .cyber-ui .history-delete{min-height:36px}
 }
+
+
+/* Dynamic QA + database health intelligence */
+.cyber-ui .dynamic-view{display:block}
+.cyber-ui .dynamic-stats{grid-template-columns:1.05fr 1.15fr .9fr}
+.cyber-ui .system-health-card{position:relative;overflow:hidden}
+.cyber-ui .system-health-card:after{
+  content:"";position:absolute;right:-38px;bottom:-54px;width:150px;height:150px;border-radius:50%;
+  border:1px solid rgba(53,255,147,.10);box-shadow:0 0 28px rgba(53,255,147,.04);pointer-events:none
+}
+.cyber-ui .health-state{
+  display:grid;grid-template-columns:12px 1fr;gap:10px;align-items:start;
+  padding:11px 12px;border:1px solid rgba(54,255,145,.14);border-radius:9px;background:#04150d;margin-bottom:11px
+}
+.cyber-ui .health-state>i{width:9px;height:9px;border-radius:50%;margin-top:4px;background:#72887b;box-shadow:0 0 8px rgba(150,180,160,.25)}
+.cyber-ui .health-state>div{display:grid;gap:3px;min-width:0}
+.cyber-ui .health-state strong{font-size:13px;color:#dffff0}
+.cyber-ui .health-state span{font-size:11px;color:#739b82;overflow-wrap:anywhere}
+.cyber-ui .health-state.success{border-color:rgba(53,255,147,.34);background:#052116}
+.cyber-ui .health-state.success>i{background:#35ff93;box-shadow:0 0 12px rgba(53,255,147,.75)}
+.cyber-ui .health-state.success strong{color:#76ffad}
+.cyber-ui .health-state.danger{border-color:rgba(255,79,104,.34);background:#241016}
+.cyber-ui .health-state.danger>i{background:#ff4f68;box-shadow:0 0 12px rgba(255,79,104,.65)}
+.cyber-ui .health-state.danger strong{color:#ff9aaa}
+.cyber-ui .health-state.warning{border-color:rgba(255,211,78,.28);background:#211c0b}
+.cyber-ui .health-state.warning>i{background:#ffd34e;box-shadow:0 0 12px rgba(255,211,78,.55)}
+.cyber-ui .health-state.warning strong{color:#ffe58d}
+.cyber-ui .health-grid{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px
+}
+.cyber-ui .health-grid>div{
+  min-width:0;border:1px solid rgba(54,255,145,.11);border-radius:8px;background:#04120b;padding:9px
+}
+.cyber-ui .health-grid span{display:block;font-size:10px;color:#679277;text-transform:uppercase;letter-spacing:.05em}
+.cyber-ui .health-grid b{display:block;font-size:12px;color:#cffff0;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:1280px){
+  .cyber-ui .dynamic-stats{grid-template-columns:1fr 1fr}
+  .cyber-ui .dynamic-stats>*:last-child{grid-column:1/-1}
+}
+@media(max-width:850px){
+  .cyber-ui .dynamic-stats{grid-template-columns:1fr}
+  .cyber-ui .dynamic-stats>*:last-child{grid-column:auto}
+  .cyber-ui .health-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:520px){
+  .cyber-ui .health-grid{grid-template-columns:1fr}
+}

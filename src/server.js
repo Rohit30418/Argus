@@ -19,7 +19,7 @@ const maxConcurrent = Math.max(1, Number(process.env.MAX_CONCURRENT_SCANS || 2))
 let active = 0;
 const jobs = new Map();
 
-app.get('/api/status', async (req, res) => res.json({ ok:true, version:'3.0.0', activeScans:active, maxConcurrent, ai:getAiStatus(), historyCount:(await listReports(500)).length }));
+app.get('/api/status', async (req, res) => res.json({ ok:true, version:'3.0.0', activeScans:active, maxConcurrent, ai:getAiStatus(), healthProbeConfigured:Boolean(String(process.env.ARGUS_HEALTH_PATH||'').trim()), historyCount:(await listReports(500)).length }));
 app.get('/api/history', async (req, res) => res.json({ items:await listReports(40) }));
 app.delete('/api/history/:id', async (req,res)=>{try{const removed=await deleteReport(req.params.id);if(!removed)return res.status(404).json({error:'Report not found'});res.json({ok:true,id:req.params.id});}catch(error){res.status(500).json({error:error.message});}});
 app.delete('/api/history', async (req,res)=>{try{const removed=await clearReports();res.json({ok:true,removed});}catch(error){res.status(500).json({error:error.message});}});

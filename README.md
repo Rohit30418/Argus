@@ -74,6 +74,9 @@ ARGUS is designed for websites you own or are authorized to test. It blocks priv
 
 ## Deploy on Render
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Rohit30418/Argus)
+
+
 ARGUS includes a Dockerfile and Render Blueprint for Chromium-based production deployment.
 
 - Runtime: Docker / Playwright Chromium

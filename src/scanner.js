@@ -390,6 +390,55 @@ function externalHosts(pages,root){
 function templateGroups(pages){const map=new Map();for(const p of pages){const id=p.templateId||routePattern(p.url);const x=map.get(id)||{id,pageCount:0,routePatterns:[id],example:p.url,issueCount:0,deepTested:0};x.pageCount++;x.issueCount+=(p.issues||[]).length;if(p.deepTested)x.deepTested++;map.set(id,x);}return [...map.values()].sort((a,b)=>b.pageCount-a.pageCount);}
 function issueCounts(pages){const out={critical:0,high:0,medium:0,low:0,total:0};for(const p of pages)for(const i of p.issues||[]){out[i.severity]=(out[i.severity]||0)+1;out.total++;}return out;}
 function scoreFrom(counts){return clamp(Math.round(100-(counts.critical*10+counts.high*4+counts.medium*1.5+counts.low*.4)),0,100);}
+function groupedFindings(pages){
+  const rank={critical:4,high:3,medium:2,low:1};
+  const map=new Map();
+  for(const p of pages){
+    for(const i of p.issues||[]){
+      const key=`${String(i.category||'Other').toLowerCase()}|${String(i.title||'Untitled').toLowerCase().replace(/\s+/g,' ').trim()}`;
+      const current=map.get(key)||{
+        key,
+        category:i.category||'Other',
+        title:i.title||'Untitled finding',
+        severity:i.severity||'medium',
+        priority:i.priority||'P2',
+        owner:i.owner||'Review',
+        confidence:i.confidence||'Medium',
+        occurrenceCount:0,
+        affectedPages:[],
+        templates:[],
+        representativeIssueId:i.id,
+        representativeUrl:p.url,
+        evidence:i.evidence,
+        whyItMatters:i.whyItMatters,
+        likelyCause:i.likelyCause,
+        recommendation:i.recommendation,
+        solutionSteps:i.solutionSteps,
+        retest:i.retest
+      };
+      current.occurrenceCount++;
+      if(!current.affectedPages.includes(p.url)&&current.affectedPages.length<100)current.affectedPages.push(p.url);
+      if(p.templateId&&!current.templates.includes(p.templateId)&&current.templates.length<30)current.templates.push(p.templateId);
+      if((rank[i.severity]||0)>(rank[current.severity]||0)){
+        current.severity=i.severity;
+        current.priority=i.priority||current.priority;
+        current.representativeIssueId=i.id;
+        current.representativeUrl=p.url;
+        current.evidence=i.evidence;
+        current.whyItMatters=i.whyItMatters;
+        current.likelyCause=i.likelyCause;
+        current.solutionSteps=i.solutionSteps;
+        current.retest=i.retest;
+      }
+      map.set(key,current);
+    }
+  }
+  const findings=[...map.values()].sort((a,b)=>(rank[b.severity]||0)-(rank[a.severity]||0)||b.occurrenceCount-a.occurrenceCount||a.title.localeCompare(b.title));
+  const byCategory={};
+  for(const item of findings)(byCategory[item.category]||(byCategory[item.category]=[])).push(item);
+  return {total:findings.length,observations:pages.reduce((n,p)=>n+(p.issues||[]).length,0),findings,byCategory};
+}
+
 function systemicPatterns(pages){const map=new Map();for(const p of pages)for(const i of p.issues||[]){const key=`${i.category}|${i.title}`;const x=map.get(key)||{category:i.category,title:i.title,severity:i.severity,pageCount:0,pages:[],recommendation:i.recommendation,likelyCause:i.likelyCause,owner:i.owner,priority:i.priority};x.pageCount++;if(x.pages.length<12)x.pages.push(p.url);map.set(key,x);}return [...map.values()].filter(x=>x.pageCount>1).sort((a,b)=>b.pageCount-a.pageCount).slice(0,40);}
 function consoleGroups(pages){const map=new Map();for(const p of pages)for(const e of p.consoleErrors||[]){const sig=cleanText(e).replace(/https?:\/\/\S+/g,'<url>').replace(/\d+/g,'#').slice(0,220);const x=map.get(sig)||{signature:sig,example:e,pageCount:0,occurrences:0,pages:[]};x.occurrences++;if(!x.pages.includes(p.url)){x.pageCount++;if(x.pages.length<10)x.pages.push(p.url);}map.set(sig,x);}return [...map.values()].sort((a,b)=>b.occurrences-a.occurrences).slice(0,30);}
 
@@ -436,11 +485,38 @@ export async function runScan({url,mode='standard',options={}},onProgress){
   finally{if(browser)await browser.close();}
   const counts=issueCounts(pages); const brokenLinks=pages.filter(p=>p.status===404||p.status===0).map(p=>({url:p.url,status:p.status,source:p.discoveredBy}));
   const templates=templateGroups(pages);
-  const report={id,version:'3.0.0',rootUrl:root,scannedAt:new Date().toISOString(),durationMs:Date.now()-started,scanMode:mode,browserEngine:'Chromium / installed Chrome',coverage:{urlsDiscovered:discovered.length,uniquePages:selected.length,lightChecked:pages.length,deepTested:pages.filter(p=>p.deepTested).length,templates:templates.length,discoveryLimit:cfg.discovered,lightLimit:cfg.light,deepLimit:cfg.deep,lightConcurrency},scanPlan:{mode,deepTargets:deepTargets.map(p=>({url:p.url,templateId:p.templateId,reason:(p.issues||[]).length?'existing findings':(p.forms||[]).length?'form/critical journey':'template representative'})).slice(0,250)},pages,issueCounts:counts,score:scoreFrom(counts),releaseGate:releaseGate(pages,counts),brokenLinks,technologies:technologies(pages),externalHosts:externalHosts(pages,root),templateGroups:templates,systemicPatterns:systemicPatterns(pages),consoleGroups:consoleGroups(pages),designSystem:designSystem(pages),responsive:responsive(pages),interactions:interactions(pages),investigation:investigationStats(pages),timeline:[]};
+  const grouped=groupedFindings(pages); const report={id,version:'3.0.0',rootUrl:root,scannedAt:new Date().toISOString(),durationMs:Date.now()-started,scanMode:mode,browserEngine:'Chromium / installed Chrome',coverage:{urlsDiscovered:discovered.length,uniquePages:selected.length,lightChecked:pages.length,deepTested:pages.filter(p=>p.deepTested).length,templates:templates.length,discoveryLimit:cfg.discovered,lightLimit:cfg.light,deepLimit:cfg.deep,lightConcurrency},scanPlan:{mode,deepTargets:deepTargets.map(p=>({url:p.url,templateId:p.templateId,reason:(p.issues||[]).length?'existing findings':(p.forms||[]).length?'form/critical journey':'template representative'})).slice(0,250)},pages,issueCounts:counts,uniqueFindingCount:grouped.total,groupedFindings:grouped,score:scoreFrom(counts),releaseGate:releaseGate(pages,counts),brokenLinks,technologies:technologies(pages),externalHosts:externalHosts(pages,root),templateGroups:templates,systemicPatterns:systemicPatterns(pages),consoleGroups:consoleGroups(pages),designSystem:designSystem(pages),responsive:responsive(pages),interactions:interactions(pages),investigation:investigationStats(pages),timeline:[]};
   const prev=options.comparePrevious===false?null:await previousForHost(new URL(root).hostname,id); report.changeGuard=changeGuard(report,prev);
   report.timeline=[{label:'Scan started',at:new Date(started).toISOString()},{label:`URLs discovered (${report.coverage.urlsDiscovered})`,at:new Date(started+Math.min(report.durationMs*.16,report.durationMs)).toISOString()},{label:`Broad QA completed (${report.coverage.lightChecked})`,at:new Date(started+Math.min(report.durationMs*.55,report.durationMs)).toISOString()},{label:`Deep investigation completed (${report.coverage.deepTested})`,at:new Date().toISOString()},{label:`Issue evidence captured (${report.investigation.issuesWithVisualEvidence})`,at:new Date().toISOString()},{label:'Report ready',at:new Date().toISOString()}];
   await fs.writeFile(path.join(SCAN_DIR,`${id}.json`),JSON.stringify(report,null,2));onProgress?.({stage:'done',message:'ARGUS investigation report ready',done:1,total:1,reportId:id});return report;
 }
 
+export async function deleteReport(id){
+  const safe=String(id||'').replace(/[^a-zA-Z0-9_-]/g,'');
+  if(!safe)return false;
+  let removed=false;
+  try{await fs.unlink(path.join(SCAN_DIR,`${safe}.json`));removed=true;}catch(error){if(error?.code!=='ENOENT')throw error;}
+  try{
+    const shots=await fs.readdir(SCREEN_DIR);
+    await Promise.all(shots.filter(name=>name.startsWith(`${safe}-`)).map(name=>fs.unlink(path.join(SCREEN_DIR,name)).catch(()=>{})));
+  }catch{}
+  return removed;
+}
+
+export async function clearReports(){
+  let removed=0;
+  try{
+    const files=await fs.readdir(SCAN_DIR);
+    for(const name of files.filter(x=>x.endsWith('.json'))){
+      try{await fs.unlink(path.join(SCAN_DIR,name));removed++;}catch{}
+    }
+  }catch{}
+  try{
+    const shots=await fs.readdir(SCREEN_DIR);
+    await Promise.all(shots.filter(x=>x.endsWith('.png')).map(name=>fs.unlink(path.join(SCREEN_DIR,name)).catch(()=>{})));
+  }catch{}
+  return removed;
+}
+
 export async function getReport(id){const safe=String(id||'').replace(/[^a-zA-Z0-9_-]/g,'');if(!safe)return null;try{return JSON.parse(await fs.readFile(path.join(SCAN_DIR,`${safe}.json`),'utf8'));}catch{return null;}}
-export async function listReports(limit=30){try{const files=(await fs.readdir(SCAN_DIR)).filter(x=>x.endsWith('.json')).sort().reverse().slice(0,limit);const out=[];for(const f of files){try{const j=JSON.parse(await fs.readFile(path.join(SCAN_DIR,f),'utf8'));out.push({id:j.id,rootUrl:j.rootUrl,scannedAt:j.scannedAt,score:j.score,issueCounts:j.issueCounts,coverage:j.coverage,scanMode:j.scanMode,durationMs:j.durationMs,investigation:j.investigation});}catch{}}return out;}catch{return[];}}
+export async function listReports(limit=30){try{const files=(await fs.readdir(SCAN_DIR)).filter(x=>x.endsWith('.json')).sort().reverse().slice(0,limit);const out=[];for(const f of files){try{const j=JSON.parse(await fs.readFile(path.join(SCAN_DIR,f),'utf8'));out.push({id:j.id,rootUrl:j.rootUrl,scannedAt:j.scannedAt,score:j.score,issueCounts:j.issueCounts,uniqueFindingCount:j.uniqueFindingCount??j.groupedFindings?.total??j.issueCounts?.total??0,coverage:j.coverage,scanMode:j.scanMode,durationMs:j.durationMs,investigation:j.investigation});}catch{}}return out;}catch{return[];}}

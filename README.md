@@ -70,3 +70,17 @@ AI is optional. Crawling, browser evidence, screenshots, deterministic fix plans
 ## Safety model
 
 ARGUS is designed for websites you own or are authorized to test. It blocks private/local targets by default and conservative interaction testing avoids destructive/payment/submit/delete/logout/approval-style actions.
+
+
+## Deploy on Render
+
+ARGUS includes a Dockerfile and Render Blueprint for Chromium-based production deployment.
+
+- Runtime: Docker / Playwright Chromium
+- Health check: `/healthz`
+- Default Render port: `10000`
+- Recommended first deployment: 1 concurrent scan
+- AI secrets are not committed. Set `AI_API_KEY` and `AI_MODEL` in Render.
+- Local Windows Chrome detection remains supported.
+
+The Render filesystem is ephemeral unless a persistent disk or external storage is configured, so scan history/screenshots can reset after redeploys or restarts.

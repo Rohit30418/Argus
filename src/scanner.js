@@ -690,7 +690,17 @@ export async function runScan({url,mode='standard',options={}},onProgress){
   const lightConcurrency=Math.min(12,envInt('ARGUS_LIGHT_CONCURRENCY',6));
   const pages=await mapPool(selected,lightConcurrency,item=>lightScan(item),()=>{completedLight++;if(completedLight%5===0||completedLight===selected.length)onProgress?.({stage:'light',message:`Broad QA ${completedLight}/${selected.length}`,done:completedLight,total:selected.length});});
   const deepTargets=chooseDeepPages(pages,cfg); let browser=null;
-  if(deepTargets.length){const executablePath=await findBrowserExecutable();const launch={headless:String(process.env.ARGUS_HEADLESS||'true').toLowerCase()!=='false'};if(executablePath)launch.executablePath=executablePath;else if(process.env.ARGUS_BROWSER_CHANNEL)launch.channel=process.env.ARGUS_BROWSER_CHANNEL;browser=await chromium.launch(launch);}
+  if(deepTargets.length){
+    const executablePath=await findBrowserExecutable();
+    const launch={headless:String(process.env.ARGUS_HEADLESS||'true').toLowerCase()!=='false'};
+    if(String(process.env.ARGUS_BROWSER_NO_SANDBOX||'').toLowerCase()==='true'){
+      launch.chromiumSandbox=false;
+      launch.args=['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage'];
+    }
+    if(executablePath)launch.executablePath=executablePath;
+    else if(process.env.ARGUS_BROWSER_CHANNEL)launch.channel=process.env.ARGUS_BROWSER_CHANNEL;
+    browser=await chromium.launch(launch);
+  }
   try{for(let i=0;i<deepTargets.length;i++){const result=await deepScan(browser,deepTargets[i],cfg,i,id,onProgress);const idx=pages.findIndex(p=>p.url===deepTargets[i].url);if(idx>=0)pages[idx]=result;}}
   finally{if(browser)await browser.close();}
   onProgress?.({stage:'health',message:'Correlating dynamic and system health evidence…',done:0,total:1});

@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: argus-pro
+    runtime: docker
+    repo: https://github.com/Rohit30418/Argus.git
+    branch: main
+    plan: free
+    region: singapore
+    autoDeployTrigger: commit
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ARGUS_HEADLESS
+        value: "true"
+      - key: ARGUS_BROWSER_NO_SANDBOX
+        value: "true"
+      - key: MAX_CONCURRENT_SCANS
+        value: "1"
+      - key: ARGUS_SCAN_RATE_LIMIT_PER_HOUR
+        value: "10"
+      - key: ARGUS_MAX_DISCOVERED_URLS
+        value: "500"
+      - key: ARGUS_MAX_LIGHT_PAGES
+        value: "120"
+      - key: ARGUS_MAX_DEEP_PAGES
+        value: "20"
+      - key: ARGUS_LIGHT_CONCURRENCY
+        value: "3"
+      - key: AI_PROVIDER
+        value: zai
+      - key: AI_BASE_URL
+        value: https://api.z.ai/api/paas/v4
+      - key: AI_ENDPOINT
+        value: /chat/completions
+      - key: AI_API_STYLE
+        value: chat
+      - key: AI_AUTH_TYPE
+        value: bearer
+      - key: AI_REQUIRE_KEY
+        value: "true"
+      - key: AI_TEMPERATURE
+        value: "0.15"
+      - key: AI_MAX_TOKENS
+        value: "3600"
+      - key: AI_TIMEOUT
+        value: "120000"
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        sync: false

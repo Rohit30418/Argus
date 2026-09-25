@@ -232,6 +232,118 @@ function mergeIssue(existing, patch) {
 
 const riskyClick=/delete|remove|purchase|buy|pay|checkout|submit|send|save|logout|sign out|unsubscribe|confirm|book|apply|upload|download|accept|decline|reject|approve/i;
 
+function healthState(value){
+  if(value===true)return 'healthy';
+  if(value===false)return 'unhealthy';
+  const s=String(value??'').toLowerCase();
+  if(/^(ok|healthy|up|connected|ready|pass|passing|available)$/.test(s))return 'healthy';
+  if(/^(fail|failed|down|unhealthy|disconnected|error|degraded|unavailable)$/.test(s))return 'unhealthy';
+  return 'unknown';
+}
+
+async function probeSystemHealth(root){
+  const configured=String(process.env.ARGUS_HEALTH_PATH||'').trim();
+  if(!configured)return {configured:false,status:'not-configured',database:{state:'unknown'}};
+  let url;
+  try{
+    url=/^https?:\/\//i.test(configured)?new URL(configured):new URL(configured.startsWith('/')?configured:`/${configured}`,root);
+    if(url.origin!==new URL(root).origin)return {configured:true,status:'invalid-config',error:'ARGUS_HEALTH_PATH must be same-origin with the scanned website.',database:{state:'unknown'}};
+    await assertPublicUrl(url.toString());
+  }catch(error){return {configured:true,status:'invalid-config',error:error.message,database:{state:'unknown'}};}
+  const timeout=envInt('ARGUS_HEALTH_TIMEOUT',5000);
+  const started=Date.now();
+  const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),timeout);
+  try{
+    const res=await fetch(url,{method:'GET',redirect:'follow',headers:{accept:'application/json','user-agent':'ARGUS-QA/3.0 health-probe'},signal:controller.signal});
+    const responseMs=Date.now()-started;
+    const type=res.headers.get('content-type')||'';
+    const text=(await res.text()).slice(0,100000);
+    let json=null; if(/json/i.test(type)){try{json=JSON.parse(text);}catch{}}
+    const db=json?.database||json?.db||json?.dependencies?.database||json?.dependencies?.db||null;
+    const dbState=healthState(db?.connected ?? db?.ok ?? db?.healthy ?? db?.status);
+    const appState=healthState(json?.application?.status ?? json?.application ?? json?.status ?? res.ok);
+    const dbResponseMs=Number(db?.responseMs ?? db?.latencyMs ?? db?.responseTimeMs);
+    return {
+      configured:true,status:res.ok?'reachable':'http-error',url:url.toString(),httpStatus:res.status,responseMs,application:{state:appState},
+      database:{
+        state:dbState,
+        responseMs:Number.isFinite(dbResponseMs)?dbResponseMs:null,
+        provider:cleanText(db?.provider||db?.engine||db?.type||'').slice(0,80)||null,
+        name:cleanText(db?.database||db?.name||'').slice(0,80)||null
+      }
+    };
+  }catch(error){
+    return {configured:true,status:'unreachable',url:url.toString(),responseMs:Date.now()-started,error:error.name==='AbortError'?`Health probe timed out after ${timeout} ms`:error.message,database:{state:'unknown'}};
+  }finally{clearTimeout(timer);}
+}
+
+async function dynamicSnapshot(page){
+  return page.evaluate(()=>{
+    const visible=el=>{const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity)!==0;};
+    const cssPath=el=>{
+      if(!el||el.nodeType!==1)return '';
+      if(el.id)return `#${CSS.escape(el.id)}`;
+      const parts=[];let cur=el;
+      while(cur&&cur.nodeType===1&&cur!==document.documentElement&&parts.length<5){
+        let part=cur.tagName.toLowerCase(); const cls=[...cur.classList].filter(Boolean).slice(0,2); if(cls.length)part+='.'+cls.map(CSS.escape).join('.');
+        const parent=cur.parentElement;if(parent){const same=[...parent.children].filter(x=>x.tagName===cur.tagName);if(same.length>1)part+=`:nth-of-type(${same.indexOf(cur)+1})`;}
+        parts.unshift(part);cur=parent;
+      }
+      return parts.join(' > ');
+    };
+    const bodyText=(document.body?.innerText||'').replace(/\s+/g,' ').trim();
+    const loaders=[...document.querySelectorAll('[aria-busy="true"],[role="progressbar"],.spinner,.loader,.loading,[class*="spinner"],[class*="loader"],[class*="loading"]')]
+      .filter(visible).slice(0,8).map(el=>({selector:cssPath(el),text:(el.innerText||el.getAttribute('aria-label')||'').trim().slice(0,120),html:el.outerHTML.slice(0,350)}));
+    return {
+      url:location.href,
+      bodyTextLength:bodyText.length,
+      textSample:bodyText.slice(0,5000),
+      visibleElements:[...document.querySelectorAll('body *')].filter(visible).length,
+      dialogs:[...document.querySelectorAll('[role="dialog"],dialog[open]')].filter(visible).length,
+      alerts:[...document.querySelectorAll('[role="alert"],.alert,.error,.success,[class*="toast"]')].filter(visible).length,
+      loaders,
+      ariaBusy:[...document.querySelectorAll('[aria-busy="true"]')].filter(visible).length
+    };
+  });
+}
+
+function dynamicChanged(before,after){
+  if(!before||!after)return false;
+  return before.url!==after.url ||
+    Math.abs((after.bodyTextLength||0)-(before.bodyTextLength||0))>15 ||
+    before.textSample!==after.textSample ||
+    before.dialogs!==after.dialogs ||
+    before.alerts!==after.alerts ||
+    Math.abs((after.visibleElements||0)-(before.visibleElements||0))>2;
+}
+
+function dynamicSummary(pages){
+  const findings=pages.flatMap(p=>(p.issues||[]).filter(i=>['Dynamic','Database','Authentication'].includes(i.category)).map(i=>({...i,page:p.url})));
+  return {
+    findings:findings.length,
+    apiUiMismatch:findings.filter(i=>/api completed but ui|ui did not visibly update/i.test(i.title)).length,
+    duplicateRequests:findings.filter(i=>/duplicate api request/i.test(i.title)).length,
+    stuckLoaders:findings.filter(i=>/loading indicator remains/i.test(i.title)).length,
+    authRejections:findings.filter(i=>/authentication|session rejection/i.test(i.title)).length,
+    database:findings.filter(i=>i.category==='Database').length
+  };
+}
+
+function applySystemHealthIssues(pages,health){
+  if(!health?.configured||!pages.length)return;
+  const p=pages.find(x=>x.url===health.url)||pages[0];
+  const add=(severity,category,title,evidence,recommendation,confidence='High',extra={})=>p.issues.push(issue({severity,category,title,evidence,recommendation,confidence,url:p.url,evidenceKind:'health-probe',...extra}));
+  if(health.status==='unreachable'||health.status==='http-error'){
+    add('medium','Infrastructure','System health probe is unavailable',`Configured health probe ${health.url||''} returned ${health.httpStatus?`HTTP ${health.httpStatus}`:health.error||'no usable response'}.`,'Verify the health endpoint and application availability. Do not classify this as a database failure unless the endpoint provides database evidence.','High',{evidenceDetails:{health}});
+    return;
+  }
+  if(health.database?.state==='unhealthy'){
+    add('critical','Database','Database health probe reports unavailable or degraded',`The configured same-origin health endpoint reported database state “${health.database.state}”${health.database.responseMs!=null?` with ${health.database.responseMs} ms response time`:''}.`,'Inspect database connectivity/pool/upstream database health and correlate with backend logs before changing frontend code.','High',{evidenceDetails:{health}});
+  }else if(health.database?.responseMs!=null&&health.database.responseMs>envInt('ARGUS_DB_SLOW_MS',1000)){
+    add('medium','Database','Database health probe is slow',`Database health response time was ${health.database.responseMs} ms; configured slow threshold is ${envInt('ARGUS_DB_SLOW_MS',1000)} ms.`,'Inspect database query/connection-pool latency and correlate with slow API routes.','Medium',{evidenceDetails:{health}});
+  }
+}
+
 async function deepScan(browser, pageSummary, cfg, index, reportId, onProgress){
   const context=await browser.newContext({viewport:{width:1366,height:820},ignoreHTTPSErrors:false});
   const page=await context.newPage();
@@ -240,7 +352,7 @@ async function deepScan(browser, pageSummary, cfg, index, reportId, onProgress){
   page.on('requestfailed',r=>{if(failedRequests.length<40)failedRequests.push({url:r.url(),method:r.method(),resourceType:r.resourceType(),error:r.failure()?.errorText||'failed'});});
   page.on('response',async r=>{
     networkHits++; const s=r.status();
-    const entry={url:r.url(),status:s,type:r.request().resourceType(),method:r.request().method(),initiator:r.request().frame()?.url()||''};
+    const entry={url:r.url(),status:s,type:r.request().resourceType(),method:r.request().method(),initiator:r.request().frame()?.url()||'',contentType:r.headers()['content-type']||'',at:Date.now()};
     if(s>=400&&httpErrors.length<60)httpErrors.push(entry);
     if(network.length<1200)network.push(entry);
   });
@@ -248,6 +360,13 @@ async function deepScan(browser, pageSummary, cfg, index, reportId, onProgress){
   try{
     const response=await page.goto(pageSummary.url,{waitUntil:'domcontentloaded',timeout:35000}); await sleep(650);
     const finalUrl=page.url(); await assertPublicUrl(finalUrl);
+    const initialDynamic=await dynamicSnapshot(page);
+    let settledDynamic=initialDynamic;
+    if(initialDynamic.loaders.length||initialDynamic.ariaBusy){
+      await page.waitForLoadState('networkidle',{timeout:1800}).catch(()=>{});
+      await sleep(250);
+      settledDynamic=await dynamicSnapshot(page);
+    }
     const dom=await page.evaluate(()=>{
       const visible=el=>{const r=el.getBoundingClientRect();const s=getComputedStyle(el);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none'&&Number(s.opacity)!==0;};
       const cssPath=el=>{
@@ -308,6 +427,14 @@ async function deepScan(browser, pageSummary, cfg, index, reportId, onProgress){
     if(dom.resourceBytes>4*1024*1024)add('medium','Performance','Heavy page transfer sample',`Observed resource transfer size was approximately ${Math.round(dom.resourceBytes/1024/1024*10)/10} MB across ${dom.resourceCount} sampled resources.`,'Optimize large assets and remove unnecessary third-party or duplicate dependencies.','Medium',{evidenceKind:'performance',evidenceDetails:{resourceBytes:dom.resourceBytes,resourceCount:dom.resourceCount}});
     const mixed=network.filter(x=>pageSummary.url.startsWith('https://')&&x.url.startsWith('http://'));
     if(mixed.length)add('high','Security','Mixed-content resource observed',`HTTPS page requested ${mixed.length} HTTP resource(s). First: ${mixed[0].url}`,'Serve every subresource over HTTPS and update hard-coded HTTP URLs.','High',{evidenceKind:'network',evidenceDetails:{requests:mixed.slice(0,8)}});
+    if(settledDynamic.loaders.length||settledDynamic.ariaBusy){
+      const t=settledDynamic.loaders[0];
+      const found=add('medium','Dynamic','Loading indicator remains visible after page settled sample',`A visible loading/busy indicator remained after the page reached the observation window. First selector: ${t?.selector||'unknown'}.`,'Confirm whether the owning request completed; ensure success/error/finally paths clear the loading state.','Medium',{selector:t?.selector,elementHtml:t?.html,evidenceDetails:{initial:initialDynamic,settled:settledDynamic}});
+      const art=await captureElement(page,reportId,found,t?.selector,'Persistent loading indicator','1366×820'); if(art)found.artifacts.push(art);
+    }
+    const authErrors=httpErrors.filter(x=>x.status===401||x.status===403);
+    if(authErrors.length)add('medium','Authentication','Authentication or session rejection observed',`${authErrors.length} runtime request(s) returned 401/403. First: ${authErrors[0].method} ${authErrors[0].url}.`,'Verify whether the session is expected to be authenticated; inspect token/cookie expiry and ensure the UI handles session rejection visibly.','Medium',{evidenceKind:'network',evidenceDetails:{requests:authErrors.slice(0,8)}});
+
 
     const mobile={};
     if(index<cfg.mobile){
@@ -338,16 +465,47 @@ async function deepScan(browser, pageSummary, cfg, index, reportId, onProgress){
         const loc=page.locator(c.selector).first();
         let preArtifact=null;
         try{
-          const before={url:page.url(),text:await page.locator('body').innerText({timeout:2000}).then(x=>x.length).catch(()=>0),networkHits,httpErrors:httpErrors.length,consoleErrors:consoleErrors.length};
+          const networkStart=network.length; const beforeDynamic=await dynamicSnapshot(page); const before={url:page.url(),text:beforeDynamic.bodyTextLength,networkHits,httpErrors:httpErrors.length,consoleErrors:consoleErrors.length};
           const tempIssue=issue({severity:'low',category:'Functional',title:`Interaction evidence: ${c.text||c.selector}`,evidence:'Pre-click evidence capture.',url:pageSummary.url,selector:c.selector,confidence:'Low'});
           preArtifact=await captureElement(page,reportId,tempIssue,c.selector,`Before click · ${c.text||'control'}`,'1366×820');
           await loc.click({timeout:3200}); await sleep(260);
-          const after={url:page.url(),text:await page.locator('body').innerText({timeout:2000}).then(x=>x.length).catch(()=>0),networkHits,httpErrors:httpErrors.length,consoleErrors:consoleErrors.length};
-          const changed=after.url!==before.url||Math.abs(after.text-before.text)>10||after.networkHits>before.networkHits;
+          await page.waitForLoadState('networkidle',{timeout:800}).catch(()=>{});
+          const afterDynamic=await dynamicSnapshot(page);
+          const after={url:page.url(),text:afterDynamic.bodyTextLength,networkHits,httpErrors:httpErrors.length,consoleErrors:consoleErrors.length};
+          const changed=dynamicChanged(beforeDynamic,afterDynamic)||after.networkHits>before.networkHits;
+          const interactionNetwork=network.slice(networkStart).filter(x=>['xhr','fetch'].includes(x.type));
+          const usefulApi=interactionNetwork.filter(x=>x.status>=200&&x.status<300&&!/analytics|telemetry|collect|metrics|track|beacon|google-analytics|gtm/i.test(x.url));
+
           const newHttp=httpErrors.slice(before.httpErrors);
           const newConsole=consoleErrors.slice(before.consoleErrors);
           const check={text:c.text,selector:c.selector,role:c.tag,outcome:changed?'observable-change':'no-observable-change',networkHits:after.networkHits-before.networkHits,error:'',httpErrors:newHttp.slice(0,5),consoleErrors:newConsole.slice(0,5)};
-          interactionChecks.push(check);
+          interactionChecks.push({...check,dynamicBefore:beforeDynamic,dynamicAfter:afterDynamic,apiRequests:interactionNetwork.slice(0,12)});
+          if(usefulApi.length&&!dynamicChanged(beforeDynamic,afterDynamic)&&/load|more|next|prev|filter|sort|search|refresh|update/i.test(c.text||'')){
+            const req=usefulApi[0];
+            const found=add('high','Dynamic','API completed but UI did not visibly update',`Clicking “${c.text||c.selector}” was followed by successful ${req.method} ${req.url} (HTTP ${req.status}), but ARGUS observed no meaningful URL/DOM/alert/dialog change.`,'Inspect the frontend response handler/state update/render path; confirm the returned data is applied to the intended component and that success/error states are handled.','Medium',{selector:c.selector,elementHtml:c.html,evidenceKind:'interaction+network+dom',evidenceDetails:{request:req,before:beforeDynamic,after:afterDynamic}});
+            if(preArtifact)found.artifacts.push({...preArtifact,label:'Trigger control for API/UI mismatch'});
+          }
+          const dupGroups=new Map();
+          for(const req of interactionNetwork.filter(x=>x.method!=='OPTIONS')){
+            const key=`${req.method} ${req.url}`; const arr=dupGroups.get(key)||[]; arr.push(req); dupGroups.set(key,arr);
+          }
+          for(const [key,arr] of dupGroups){
+            if(arr.length<2)continue;
+            const times=arr.map(x=>x.at||0).filter(Boolean); const span=times.length?Math.max(...times)-Math.min(...times):0;
+            if(span<=1600){
+              const found=add('medium','Dynamic','Duplicate API request after single interaction',`One click on “${c.text||c.selector}” produced ${arr.length} matching XHR/fetch responses for ${key} within ${span} ms.`,'Check duplicate event binding, effect re-execution, double dispatch, retry logic, or multiple subscriptions before treating the backend as the cause.','Medium',{selector:c.selector,elementHtml:c.html,evidenceKind:'interaction+network',evidenceDetails:{requests:arr.slice(0,8),interaction:c.text}});
+              if(preArtifact)found.artifacts.push({...preArtifact,label:'Trigger control for duplicate request'});
+            }
+          }
+          if(afterDynamic.loaders.length&&usefulApi.length){
+            await sleep(900);
+            const finalDynamic=await dynamicSnapshot(page);
+            const sameLoader=afterDynamic.loaders.find(a=>finalDynamic.loaders.some(b=>b.selector===a.selector));
+            if(sameLoader){
+              const found=add('medium','Dynamic','Loading indicator remains after request completed',`A successful API request completed after “${c.text||c.selector}”, but loading indicator ${sameLoader.selector||'unknown'} remained visible in the follow-up sample.`,'Ensure the request completion path clears loading state in success, empty-result and error/finally branches.','High',{selector:sameLoader.selector,elementHtml:sameLoader.html,evidenceKind:'interaction+network+dom',evidenceDetails:{requests:usefulApi.slice(0,6),after:afterDynamic,final:finalDynamic}});
+              const art=await captureElement(page,reportId,found,sameLoader.selector,'Stuck loading indicator after completed request','1366×820'); if(art)found.artifacts.push(art);
+            }
+          }
           if(!changed){
             const found=add('low','Functional','UI control produced no observable effect',`Safe click on “${c.text||c.selector}” produced no URL change, meaningful body-length change, or network activity in the observation window.`,'Reproduce manually and verify the control wiring/state.','Low',{selector:c.selector,elementHtml:c.html,reproductionSteps:[`Open ${pageSummary.url}.`,`Locate “${c.text||c.selector}” (${c.selector}).`,'Click the control once.','Observe whether the intended UI state, navigation or network activity occurs.'],expected:'The control should produce its documented UI/navigation/state effect.',actual:'ARGUS detected no observable URL, body-length or network change during the conservative observation window.',evidenceDetails:{interaction:check}});
             if(preArtifact)found.artifacts.push({...preArtifact,label:'Control with no observed effect'});
@@ -367,7 +525,7 @@ async function deepScan(browser, pageSummary, cfg, index, reportId, onProgress){
 
     issues=issues.map(i=>enrichIssue(i));
     const artifacts=issues.flatMap(i=>i.artifacts||[]);
-    return {...pageSummary,url:finalUrl,status:response?.status()||pageSummary.status,title:dom.title||pageSummary.title,h1:dom.h1.length?dom.h1:pageSummary.h1,issues,consoleErrors,failedRequests,httpErrors,network,performance:dom.timing?{...dom.timing,resourceBytes:dom.resourceBytes,resourceCount:dom.resourceCount}:null,a11y:{missingAlt:dom.missingAltItems.length,unlabeledControls:dom.unlabeledItems.length,duplicateIds:dom.dupIds.length},mobileAudit:Object.keys(mobile).length?mobile:null,interactionChecks,evidenceArtifacts:artifacts,designSample:{fonts:dom.fonts,colors:dom.colors},deepTested:true};
+    return {...pageSummary,url:finalUrl,status:response?.status()||pageSummary.status,title:dom.title||pageSummary.title,h1:dom.h1.length?dom.h1:pageSummary.h1,issues,consoleErrors,failedRequests,httpErrors,network,performance:dom.timing?{...dom.timing,resourceBytes:dom.resourceBytes,resourceCount:dom.resourceCount}:null,a11y:{missingAlt:dom.missingAltItems.length,unlabeledControls:dom.unlabeledItems.length,duplicateIds:dom.dupIds.length},mobileAudit:Object.keys(mobile).length?mobile:null,interactionChecks,dynamicAudit:{initial:initialDynamic,settled:settledDynamic},evidenceArtifacts:artifacts,designSample:{fonts:dom.fonts,colors:dom.colors},deepTested:true};
   }catch(error){
     const issues=[...(pageSummary.issues||[]),issue({severity:'high',category:'Functional',title:'Deep browser test failed',evidence:error.message,recommendation:'Open the page manually and inspect browser/network errors, then retry ARGUS.',confidence:'High',url:pageSummary.url,evidenceKind:'browser'})];
     return {...pageSummary,issues,consoleErrors,failedRequests,httpErrors,network,deepTested:true,deepError:error.message};
@@ -483,9 +641,12 @@ export async function runScan({url,mode='standard',options={}},onProgress){
   if(deepTargets.length){const executablePath=await findBrowserExecutable();const launch={headless:String(process.env.ARGUS_HEADLESS||'true').toLowerCase()!=='false'};if(executablePath)launch.executablePath=executablePath;else if(process.env.ARGUS_BROWSER_CHANNEL)launch.channel=process.env.ARGUS_BROWSER_CHANNEL;browser=await chromium.launch(launch);}
   try{for(let i=0;i<deepTargets.length;i++){const result=await deepScan(browser,deepTargets[i],cfg,i,id,onProgress);const idx=pages.findIndex(p=>p.url===deepTargets[i].url);if(idx>=0)pages[idx]=result;}}
   finally{if(browser)await browser.close();}
+  onProgress?.({stage:'health',message:'Correlating dynamic and system health evidence…',done:0,total:1});
+  const systemHealth=await probeSystemHealth(root);
+  applySystemHealthIssues(pages,systemHealth);
   const counts=issueCounts(pages); const brokenLinks=pages.filter(p=>p.status===404||p.status===0).map(p=>({url:p.url,status:p.status,source:p.discoveredBy}));
   const templates=templateGroups(pages);
-  const grouped=groupedFindings(pages); const report={id,version:'3.0.0',rootUrl:root,scannedAt:new Date().toISOString(),durationMs:Date.now()-started,scanMode:mode,browserEngine:'Chromium / installed Chrome',coverage:{urlsDiscovered:discovered.length,uniquePages:selected.length,lightChecked:pages.length,deepTested:pages.filter(p=>p.deepTested).length,templates:templates.length,discoveryLimit:cfg.discovered,lightLimit:cfg.light,deepLimit:cfg.deep,lightConcurrency},scanPlan:{mode,deepTargets:deepTargets.map(p=>({url:p.url,templateId:p.templateId,reason:(p.issues||[]).length?'existing findings':(p.forms||[]).length?'form/critical journey':'template representative'})).slice(0,250)},pages,issueCounts:counts,uniqueFindingCount:grouped.total,groupedFindings:grouped,score:scoreFrom(counts),releaseGate:releaseGate(pages,counts),brokenLinks,technologies:technologies(pages),externalHosts:externalHosts(pages,root),templateGroups:templates,systemicPatterns:systemicPatterns(pages),consoleGroups:consoleGroups(pages),designSystem:designSystem(pages),responsive:responsive(pages),interactions:interactions(pages),investigation:investigationStats(pages),timeline:[]};
+  const grouped=groupedFindings(pages); const report={id,version:'3.0.0',rootUrl:root,scannedAt:new Date().toISOString(),durationMs:Date.now()-started,scanMode:mode,browserEngine:'Chromium / installed Chrome',coverage:{urlsDiscovered:discovered.length,uniquePages:selected.length,lightChecked:pages.length,deepTested:pages.filter(p=>p.deepTested).length,templates:templates.length,discoveryLimit:cfg.discovered,lightLimit:cfg.light,deepLimit:cfg.deep,lightConcurrency},scanPlan:{mode,deepTargets:deepTargets.map(p=>({url:p.url,templateId:p.templateId,reason:(p.issues||[]).length?'existing findings':(p.forms||[]).length?'form/critical journey':'template representative'})).slice(0,250)},pages,issueCounts:counts,uniqueFindingCount:grouped.total,groupedFindings:grouped,score:scoreFrom(counts),releaseGate:releaseGate(pages,counts),brokenLinks,technologies:technologies(pages),externalHosts:externalHosts(pages,root),templateGroups:templates,systemicPatterns:systemicPatterns(pages),consoleGroups:consoleGroups(pages),designSystem:designSystem(pages),responsive:responsive(pages),interactions:interactions(pages),dynamic:dynamicSummary(pages),systemHealth,investigation:investigationStats(pages),timeline:[]};
   const prev=options.comparePrevious===false?null:await previousForHost(new URL(root).hostname,id); report.changeGuard=changeGuard(report,prev);
   report.timeline=[{label:'Scan started',at:new Date(started).toISOString()},{label:`URLs discovered (${report.coverage.urlsDiscovered})`,at:new Date(started+Math.min(report.durationMs*.16,report.durationMs)).toISOString()},{label:`Broad QA completed (${report.coverage.lightChecked})`,at:new Date(started+Math.min(report.durationMs*.55,report.durationMs)).toISOString()},{label:`Deep investigation completed (${report.coverage.deepTested})`,at:new Date().toISOString()},{label:`Issue evidence captured (${report.investigation.issuesWithVisualEvidence})`,at:new Date().toISOString()},{label:'Report ready',at:new Date().toISOString()}];
   await fs.writeFile(path.join(SCAN_DIR,`${id}.json`),JSON.stringify(report,null,2));onProgress?.({stage:'done',message:'ARGUS investigation report ready',done:1,total:1,reportId:id});return report;

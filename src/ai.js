@@ -75,7 +75,19 @@ function rankedPages(report) {
 }
 
 function compactReport(report) {
-  const grouped=report.groupedFindings?.findings||[];
+  let grouped=report.groupedFindings?.findings||[];
+  if(!grouped.length){
+    const map=new Map();
+    for(const p of report.pages||[])for(const i of p.issues||[]){
+      const key=`${String(i.category||'Other').toLowerCase()}|${String(i.title||'Untitled').toLowerCase().replace(/\s+/g,' ').trim()}`;
+      const g=map.get(key)||{category:i.category||'Other',title:i.title,severity:i.severity,priority:i.priority,owner:i.owner,confidence:i.confidence,occurrenceCount:0,affectedPages:[],templates:[],evidence:i.evidence,whyItMatters:i.whyItMatters,likelyCause:i.likelyCause,solutionSteps:i.solutionSteps,retest:i.retest};
+      g.occurrenceCount++;
+      if(p.url&&!g.affectedPages.includes(p.url))g.affectedPages.push(p.url);
+      if(p.templateId&&!g.templates.includes(p.templateId))g.templates.push(p.templateId);
+      map.set(key,g);
+    }
+    grouped=[...map.values()];
+  }
   return {
     rootUrl:report.rootUrl,
     scannedAt:report.scannedAt,

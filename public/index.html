@@ -29,6 +29,7 @@
       <button class="nav" data-view="issues"><span>◉</span>Issue Explorer <b id="navIssueCount">0</b></button>
       <button class="nav" data-view="pages"><span>▤</span>Page Explorer</button>
       <button class="nav" data-view="journeys"><span>⌘</span>Interactions</button>
+      <button class="nav" data-view="forms"><span>▧</span>Form Tester</button>
       <button class="nav" data-view="network"><span>⌬</span>Network & APIs</button>
       <button class="nav" data-view="dynamic"><span>◈</span>Dynamic & DB</button>
       <button class="nav" data-view="performance"><span>◴</span>Performance</button>
@@ -78,6 +79,7 @@
       <div class="scan-settings">
         <label><input id="crawlEntireSite" type="checkbox" checked> Crawl site</label>
         <label><input id="testInteractions" type="checkbox" checked> Test interactions</label>
+        <label title="Opt-in, synthetic inputs only. Never submits forms."><input id="testForms" type="checkbox"> Smart form testing</label>
         <label><input id="mobileChecks" type="checkbox" checked> Mobile checks</label>
         <label><input id="comparePrevious" type="checkbox" checked> ChangeGuard</label>
         <span id="modeHint">Up to 450 broad checks · 90 deep investigations</span>
@@ -121,6 +123,7 @@
         <button class="tab" data-view="issues">Evidence Lab</button>
         <button class="tab" data-view="pages">Pages</button>
         <button class="tab" data-view="journeys">Interactions</button>
+        <button class="tab" data-view="forms">Form Tester</button>
         <button class="tab" data-view="network">Network</button>
         <button class="tab" data-view="dynamic">Dynamic & DB</button>
         <button class="tab" data-view="changeguard">ChangeGuard</button>

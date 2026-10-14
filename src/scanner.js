@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { enrichIssue, issueFingerprint } from './solutions.js';
+import { auditForms } from './form-tester.js';
 
 const DATA_DIR = path.resolve('data');
 const SCAN_DIR = path.join(DATA_DIR, 'scans');
@@ -575,9 +576,43 @@ async function deepScan(browser, pageSummary, cfg, index, reportId, onProgress){
       }
     }
 
+    // Form testing is opt-in. It opens a separate, request-guarded tab and
+    // verifies browser constraints without ever submitting a form.
+    const formAudit = cfg.testForms && index < cfg.formPages
+      ? await auditForms(context, pageSummary.url, {
+          maxForms:cfg.formsPerPage,
+          maxScenarios:12,
+          validateUrl:assertPublicUrl,
+          onFailure:async (testPage, check) => {
+            const found = add('high','Form Validation','Form validation failed: '+check.scenario,
+              'Field "'+check.field+'" accepted invalid synthetic input in '+check.form+
+              ' (expected '+check.expected+', observed '+check.observed+').',
+              'Apply appropriate native constraints (required, input type, min/max, minlength) and validate again on the server.',
+              'High',{
+                selector:check.selector, evidenceKind:'form-validation',
+                evidenceDetails:{form:check.form,field:check.field,fieldType:check.fieldType,scenario:check.scenario,expected:check.expected,observed:check.observed},
+                expected:'Browser validity must report '+check.expected+' for this invalid input.',
+                actual:'Browser validity reported '+check.observed+' instead.',
+                reproductionSteps:['Open '+pageSummary.url+'.','Locate '+check.form+' → '+check.field+'.',
+                  'Enter the invalid synthetic input for the '+check.scenario+' scenario (do not submit).',
+                  'Inspect the field validity and verify '+check.expected+'.'],
+                solutionSteps:['Locate the affected form field or shared input component.',
+                  'Apply the correct native constraint and accessible validation message.',
+                  'Verify client-side validation and always validate the same rule on the server.',
+                  'Re-run ARGUS Form Tester using the same scenario.'],
+                retest:['Enter invalid test input and confirm the browser rejects it.',
+                  'Confirm a clear accessible error appears in the application where appropriate.',
+                  'Verify valid data is accepted in an authorized test environment.']
+              });
+            const artifact = await captureElement(testPage,reportId,found,check.selector,'Invalid form field','1366×820');
+            if (artifact) found.artifacts.push(artifact);
+          }
+        })
+      : null;
+
     issues=issues.map(i=>enrichIssue(i));
     const artifacts=issues.flatMap(i=>i.artifacts||[]);
-    return {...pageSummary,url:finalUrl,status:response?.status()||pageSummary.status,title:dom.title||pageSummary.title,h1:dom.h1.length?dom.h1:pageSummary.h1,issues,consoleErrors,failedRequests,httpErrors,network,performance:dom.timing?{...dom.timing,resourceBytes:dom.resourceBytes,resourceCount:dom.resourceCount}:null,a11y:{missingAlt:dom.missingAltItems.length,unlabeledControls:dom.unlabeledItems.length,duplicateIds:dom.dupIds.length},mobileAudit:Object.keys(mobile).length?mobile:null,interactionChecks,dynamicAudit:{initial:initialDynamic,settled:settledDynamic},evidenceArtifacts:artifacts,designSample:{fonts:dom.fonts,colors:dom.colors},deepTested:true};
+    return {...pageSummary,url:finalUrl,status:response?.status()||pageSummary.status,title:dom.title||pageSummary.title,h1:dom.h1.length?dom.h1:pageSummary.h1,issues,consoleErrors,failedRequests,httpErrors,network,performance:dom.timing?{...dom.timing,resourceBytes:dom.resourceBytes,resourceCount:dom.resourceCount}:null,a11y:{missingAlt:dom.missingAltItems.length,unlabeledControls:dom.unlabeledItems.length,duplicateIds:dom.dupIds.length},mobileAudit:Object.keys(mobile).length?mobile:null,interactionChecks,formAudit,dynamicAudit:{initial:initialDynamic,settled:settledDynamic},evidenceArtifacts:artifacts,designSample:{fonts:dom.fonts,colors:dom.colors},deepTested:true};
   }catch(error){
     const issues=[...(pageSummary.issues||[]),issue({severity:'high',category:'Functional',title:'Deep browser test failed',evidence:error.message,recommendation:'Open the page manually and inspect browser/network errors, then retry ARGUS.',confidence:'High',url:pageSummary.url,evidenceKind:'browser'})];
     return {...pageSummary,issues,consoleErrors,failedRequests,httpErrors,network,deepTested:true,deepError:error.message};
@@ -682,6 +717,9 @@ export async function runScan({url,mode='standard',options={}},onProgress){
   cfg.discovered=Math.min(cfg.discovered,envInt('ARGUS_MAX_DISCOVERED_URLS',5000)); cfg.light=Math.min(cfg.light,envInt('ARGUS_MAX_LIGHT_PAGES',1200)); cfg.deep=Math.min(cfg.deep,envInt('ARGUS_MAX_DEEP_PAGES',220));
   if(options.crawlEntireSite===false){cfg.discovered=Math.min(cfg.discovered,40);cfg.light=Math.min(cfg.light,30);}
   if(options.testInteractions===false)cfg.interactions=0; if(options.mobile===false)cfg.mobile=0;
+  cfg.testForms=options.testForms===true;
+  cfg.formPages=Math.min(cfg.deep, mode==='quick'?3:mode==='standard'?8:mode==='full'?24:14);
+  cfg.formsPerPage=mode==='full'?5:mode==='quick'?2:3;
   const id=`${Date.now()}-${sha(root)}`; const started=Date.now();
   await fs.mkdir(SCAN_DIR,{recursive:true}); await fs.mkdir(SCREEN_DIR,{recursive:true});
   onProgress?.({stage:'start',message:'Validating target and building scan plan…',done:0,total:1});
@@ -709,6 +747,18 @@ export async function runScan({url,mode='standard',options={}},onProgress){
   const counts=issueCounts(pages); const brokenLinks=pages.filter(p=>p.status===404||p.status===0).map(p=>({url:p.url,status:p.status,source:p.discoveredBy}));
   const templates=templateGroups(pages);
   const grouped=groupedFindings(pages); const report={id,version:'3.0.0',rootUrl:root,scannedAt:new Date().toISOString(),durationMs:Date.now()-started,scanMode:mode,browserEngine:'Chromium / installed Chrome',coverage:{urlsDiscovered:discovered.length,uniquePages:selected.length,lightChecked:pages.length,deepTested:pages.filter(p=>p.deepTested).length,templates:templates.length,discoveryLimit:cfg.discovered,lightLimit:cfg.light,deepLimit:cfg.deep,lightConcurrency},scanPlan:{mode,deepTargets:deepTargets.map(p=>({url:p.url,templateId:p.templateId,reason:(p.issues||[]).length?'existing findings':(p.forms||[]).length?'form/critical journey':'template representative'})).slice(0,250)},pages,issueCounts:counts,uniqueFindingCount:grouped.total,groupedFindings:grouped,score:scoreFrom(counts),releaseGate:releaseGate(pages,counts),brokenLinks,technologies:technologies(pages),externalHosts:externalHosts(pages,root),templateGroups:templates,systemicPatterns:systemicPatterns(pages),consoleGroups:consoleGroups(pages),designSystem:designSystem(pages),responsive:responsive(pages),interactions:interactions(pages),dynamic:dynamicSummary(pages),systemHealth,investigation:investigationStats(pages),timeline:[]};
+  const formPages=pages.filter(p=>p.formAudit);
+  const formChecks=formPages.flatMap(p=>p.formAudit.checks||[]);
+  report.formTesting={
+    enabled:cfg.testForms,
+    pagesTested:formPages.length,
+    formsDiscovered:formPages.reduce((n,p)=>n+(p.formAudit.formsDiscovered||0),0),
+    formsTested:formPages.reduce((n,p)=>n+(p.formAudit.formsTested||0),0),
+    passed:formChecks.filter(c=>c.status==='passed').length,
+    failed:formChecks.filter(c=>c.status==='failed').length,
+    skipped:formPages.reduce((n,p)=>n+(p.formAudit.skipped||0),0),
+    errors:formPages.filter(p=>p.formAudit.error).map(p=>({url:p.url,error:p.formAudit.error}))
+  };
   const prev=options.comparePrevious===false?null:await previousForHost(new URL(root).hostname,id); report.changeGuard=changeGuard(report,prev);
   report.timeline=[{label:'Scan started',at:new Date(started).toISOString()},{label:`URLs discovered (${report.coverage.urlsDiscovered})`,at:new Date(started+Math.min(report.durationMs*.16,report.durationMs)).toISOString()},{label:`Broad QA completed (${report.coverage.lightChecked})`,at:new Date(started+Math.min(report.durationMs*.55,report.durationMs)).toISOString()},{label:`Deep investigation completed (${report.coverage.deepTested})`,at:new Date().toISOString()},{label:`Issue evidence captured (${report.investigation.issuesWithVisualEvidence})`,at:new Date().toISOString()},{label:'Report ready',at:new Date().toISOString()}];
   await fs.writeFile(path.join(SCAN_DIR,`${id}.json`),JSON.stringify(report,null,2));onProgress?.({stage:'done',message:'ARGUS investigation report ready',done:1,total:1,reportId:id});return report;

@@ -21,6 +21,26 @@ ARGUS does not stop at "issue found". Each deep finding can include:
 
 Page-level findings such as CSP/header or HTTP failures do **not** receive a misleading visual screenshot; ARGUS shows the relevant header/network evidence instead.
 
+## Smart Form Tester (opt-in)
+
+Enable **Smart form testing** before scanning to run native browser-validation checks on
+public, non-sensitive forms. Form Tester appears as its own sidebar and report tab.
+
+- Discovers forms on a capped selection of deep-scanned pages.
+- Uses synthetic data to check required-empty, invalid email, invalid URL,
+  minimum-length and number min/max browser constraints.
+- Records passed, failed, skipped checks; failed native validation checks create
+  evidence-backed findings with element screenshots when available.
+- Opens a separate isolated tab, blocks non-GET/HEAD network calls and cross-origin
+  navigation, **never submits a form**, and skips password/payment/authentication,
+  upload and other sensitive workflows.
+- Does not claim to verify submit-only JavaScript validation, database writes or
+  server-side validation. Some JavaScript applications trigger GET requests from
+  field events; only scan websites you are authorized to test.
+
+The option is off by default. Deep scan coverage is capped (quick: 3 pages,
+standard: 8, deep: 14, full: 24; a limited number of forms/scenarios per page).
+
 ## Smart coverage
 
 ARGUS discovers many URLs, broadly checks a larger set, groups route templates, then promotes risky/representative pages to deep browser investigation. This avoids running expensive interaction/mobile investigation on hundreds of duplicate template pages.

@@ -51,8 +51,9 @@ async function inventory(page) {
  * clicked and no personal data is used. Only browser constraint validation is
  * asserted, so custom submit-only validation is deliberately NOT claimed tested.
  */
-export async function auditForms(context, targetUrl, {maxForms=3, maxScenarios=12, validateUrl, onFailure}={}) {
+export async function auditForms(browser, targetUrl, {maxForms=3, maxScenarios=12, validateUrl, onFailure}={}) {
   const result = EMPTY();
+  const context = await browser.newContext({viewport:{width:1366,height:820}, serviceWorkers:'block', acceptDownloads:false});
   const page = await context.newPage();
   const allowed = new Map();
   const origin = new URL(targetUrl).origin;
@@ -127,7 +128,7 @@ export async function auditForms(context, targetUrl, {maxForms=3, maxScenarios=1
   } catch (error) {
     result.error = String(error.message || error).slice(0,350);
   } finally {
-    await page.close().catch(()=>{});
+    await context.close().catch(()=>{});
   }
   result.fieldsTested = new Set(result.checks.filter(c=>c.status!=='skipped').map(c=>c.form+'|'+c.field)).size;
   return result;

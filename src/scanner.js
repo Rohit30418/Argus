@@ -579,7 +579,7 @@ async function deepScan(browser, pageSummary, cfg, index, reportId, onProgress){
     // Form testing is opt-in. It opens a separate, request-guarded tab and
     // verifies browser constraints without ever submitting a form.
     const formAudit = cfg.testForms && index < cfg.formPages
-      ? await auditForms(context, pageSummary.url, {
+      ? await auditForms(browser, pageSummary.url, {
           maxForms:cfg.formsPerPage,
           maxScenarios:12,
           validateUrl:assertPublicUrl,
